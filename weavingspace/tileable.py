@@ -633,12 +633,15 @@ class Tileable:
     w = self.prototile.loc[0, "geometry"].bounds[2] - \
       self.prototile.loc[0, "geometry"].bounds[0]
     n_cols = len(set(self.tiles.tile_id))
-    if n_cols > 12:
-      cm = "Spectral"
-    elif n_cols > 8:
-      cm = "Paired"
+    if cmap is None:
+      if n_cols > 12:
+        cm = "Spectral"
+      elif n_cols > 8:
+        cm = "Paired"
+      else:
+        cm = "Dark2"
     else:
-      cm = "Dark2"
+      cm = cmap
     if ax is None:
       ax = self.tiles.plot(
         column="tile_id", cmap=cm, figsize=figsize, alpha = alpha, **kwargs)

@@ -8,38 +8,31 @@ exclude = ["superseded"]
 
 [project]
 name = "weavingspace"
-version = "0.0.7.19"
+version = "0.0.7.59"
 authors = [
   { name="David O'Sullivan", email="osullivan512@gmail.com" },
 ]
 description = "A package for making tiled mapping layers"
-requires-python = ">=3.12.0"
+readme = "README.md"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
-readme = "README.md"
 license = "MIT"
 dependencies = [
-    "requests",
-    'importlib-metadata; python_version>="3.12"',
+    "dataclasses",
+    "matplotlib",
     "fiona",
     "geopandas",
     "mapclassify",
-    "pandas",
-    "numpy",
-    "scipy",
-    "shapely",
     "networkx",
-    "pillow",
-    "matplotlib",
-    "dataclasses",
     "typing",
 ]
 
 [project.urls]
-Homepage = "https://github.com/DOSull/weaving-space"
-Repository = "https://github.com/DOSull/weaving-space"
+Homepage = "https://github.com/DOSull/weavingspace"
+Repository = "https://github.com/DOSull/weavingspace"
 
 [tool.ruff.lint]
 select = ["ALL"]

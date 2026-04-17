@@ -17,6 +17,7 @@ toc-depth: 4
 
 | Date       | Changes
 |:-          |:-------
+| 2026-04-17 | Corrected images and other links.
 | 2025-02-08 | Updated and converted to `.qmd`.
 | 2024-02-04 | Initial draft.
 
@@ -40,14 +41,14 @@ The whole point of venturing into [topology](#topology) was to enable principled
 
 At the moment the `Topology` class enables a number of transformations of tiling [vertices](#vertex) and [edges](#edge):
 
-+ ['Zig-zag' an edge](https://dosull.github.io/weaving-space/doc/weavingspace/topology.html#Topology.zigzag_edge), which will add [corners](#corner) along an edge in a zig-zag pattern.
-+ [Rotate an edge](https://dosull.github.io/weaving-space/doc/weavingspace/topology.html#Topology.rotate_edge) about its centre, which may cause its associated end point [vertices](#vertex) to move.
-+ ['Push' a vertex](https://dosull.github.io/weaving-space/doc/weavingspace/topology.html#Topology.push_vertex) will move a [vertex](#vertex) in the direction of the resultant unit vector of its incoming incident [edges](#edge).
-+ [Nudge a vertex](https://dosull.github.io/weaving-space/doc/weavingspace/topology.html#Topology.nudge_vertex) will move all [vertices](#vertex) in a specifed [transitivity class](#transitivity-class) by a given displacement. This almost always makes tiles non-similar.
++ ['Zig-zag' an edge](https://dosull.github.io/weavingspace/doc/weavingspace/topology.html#Topology.zigzag_edge), which will add [corners](#corner) along an edge in a zig-zag pattern.
++ [Rotate an edge](https://dosull.github.io/weavingspace/doc/weavingspace/topology.html#Topology.rotate_edge) about its centre, which may cause its associated end point [vertices](#vertex) to move.
++ ['Push' a vertex](https://dosull.github.io/weavingspace/doc/weavingspace/topology.html#Topology.push_vertex) will move a [vertex](#vertex) in the direction of the resultant unit vector of its incoming incident [edges](#edge).
++ [Nudge a vertex](https://dosull.github.io/weavingspace/doc/weavingspace/topology.html#Topology.nudge_vertex) will move all [vertices](#vertex) in a specifed [transitivity class](#transitivity-class) by a given displacement. This almost always makes tiles non-similar.
 
-Some examples of these can be seen in [this notebook](https://dosull.github.io/weaving-space/examples/topology-working.ipynb), although a less impenetrable interface to applying transformations is likely required.
+Some examples of these can be seen in [this notebook](https://dosull.github.io/weavingspace/examples/topology-working.ipynb), although a less impenetrable interface to applying transformations is likely required.
 
-It's also worth noting that the `Topology` class offers a likely more reliable way to generate dual tilings, than the [`tiling_utils.get_dual_tile_unit_`](https://dosull.github.io/weaving-space/doc/weavingspace/tiling_utils.html#get_dual_tile_unit) function.
+It's also worth noting that the `Topology` class offers a likely more reliable way to generate dual tilings, than the [`tiling_utils.get_dual_tile_unit_`](https://dosull.github.io/weavingspace/doc/weavingspace/tiling_utils.html#get_dual_tile_unit) function.
 
 ## Corners and vertices
 The tile [corner](#corner) / tiling [vertex](#vertex) distinction is not carefully observed in the code. The [transitivity class](#transitivity-class) implementation should make this easier to do. For example it should be easy enough now to *not* label corners, as the logic of tiling symmetry implies.

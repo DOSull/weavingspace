@@ -72,7 +72,7 @@ An approach based on tiling
 ::: {.column width="70%"}
 A python module developed for making tiled maps
 
-[github.com/DOSull/weaving-space](https://github.com/DOSull/weaving-space)
+[github.com/DOSull/weaving-space](https://github.com/DOSull/weavingspace)
 
 `> pip install weavingspace`
 
@@ -219,7 +219,7 @@ Allen J. 2025. Mapping mode share in Toronto via weaving space. At [schoolofciti
 <h3 style="font-size:144px;text-align:center;">Questions?</h3>
 
 ::: {style="text-align:center;"}
-[github.com/DOSull/weaving-space](https://github.com/DOSull/weaving-space)
+[github.com/DOSull/weavingspace](https://github.com/DOSull/weavingspace)
 
 [dosull.github.io/mapweaver/app](https://dosull.github.io/mapweaver/app)
 

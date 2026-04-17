@@ -14,6 +14,7 @@ toc: true
 
 | Date       | Changes
 |:-          |:-------
+| 2026-04-17 | Moved images to local.
 | 2025-02-08 | converted to `.qmd`.
 | 2023-11-15 | Converted to `.md`.
 | 2023-02-14 | Updated.
@@ -41,7 +42,7 @@ A mathematical *tiling* turns out to be a GIS coverage! Thus:
 
 GS87 are careful to distinguish *vertices* and *edges* of a tiling $\mathcal{T}$ from the *corners* and *sides* of the tiles $T_i$ that form the tiling. Tilings in which every edge of the tiling is also a side of a tile are referred to as *edge-to-edge* which becomes an important constraint in some situations. The tiling below left is not edge-to-edge, but is topologically equivalent to the regular tiling by hexagons. Note that a lot of the 'tilings' we produce by 'weaving' break this restriction!
 
-![](images/parquet-hex.png)
+![](../images/parquet-hex.png)
 
 At each tiling vertex, the number of tiling edges that meet is the *valence* of the vertex. GS87 are interested to explore tiling properties contingent on their vertex valences. By definition two tiles meet at each tiling edge, and the number of tiles that meet at each vertex is also given by the valence.
 
@@ -52,7 +53,7 @@ Given these definitions, we can think about a number of possible tiling properti
 ### Tile shape
 A $k$-hedral tiling is formed from $k$ distinct shapes of tile (including under reflection and rotation). So, for example the arrowhead and parallelogram tilings below are monohedral.
 
-![](images/arrows-parallelograms.png)
+![](../images/arrows-parallelograms.png)
 
 In general, it seems like we might want tilings that are $k$-hedral where $k>1$, to allow tiles to be distinguished from one another. Likely what we want is more subtle than that. After all, the arrows in the above tiling are readily distinguished from one another and could be symbolised separately with little danger of confusion.
 
@@ -88,13 +89,13 @@ The symmetries of a tiling will map various tiles on to other tiles. The number 
 
 The concept extends naturally to $k$-isohedrality. It is important to realise that a tiling may be monohedral or $m$-hedral with $m=1$ and $k$-isohedral with $m\neq k$ and in fact that $m\leq k$. The simple example noted in GS87 and elsewhere (see also Kaplan, p36) is shown below.
 
-![](images/basket-tiles.png)
+![](../images/basket-tiles.png)
 
 The darker coloured tiles cannot be mapped onto the paler set by any isometry hence the tiling is monohedral and $2$-isohedral.
 
 Again, it seems like it might be important for cartographic purposes that tilings be $k$-isohedral with $k>1$ to allow tiles to be distinguished from one another. However this is by no means clear. For example the tiling below has 4 distinguishable tiles but is isohedral.
 
-![](images/45-degree-triangles.png)
+![](../images/45-degree-triangles.png)
 
 ### Isogonality and isotoxality
 Isogonality takes the notion of the transitivity groups of a tilings tiles and applies it instead to the vertices. So an isogonal tiling has some symmetry that maps every vertex to every other, while a $k$-isogonal tiling has $k$ distinct sets of vertices under the transformations of its symmetries.
@@ -117,7 +118,7 @@ $$\sum_{i=1}^k\frac{n_i-2}{n_i}=2$$
 
 where $k$ non-distinct polygons meet at each vertex. It can be shown that only 17 combinations of integer values of $n$ match this constraint, including such unlikely candidates as $\{3,7,42\}$ but only 11 of these yield tileable configurations:
 
-![](images/archimedean-tilings.png)(from Kaplan, p31)
+![](../images/archimedean-tilings.png)(from Kaplan, p31)
 
 Three of these are the regular tilings whose *flags*&mdash;or vertex-edge-tile triples&mdash;are transitive under its symmetries. The remaining 8 are semi-regular. All 11 are isogonal but not isohedral (since they are not all monohedral). Which of these are most suitable for mapping is open to conjecture. The three regular tilings (discussed below) likely required a bit more work. The others, with more than one polygon may be more immediately applicable. Even so, the two containing dodecagons, given how much larger these are than the other polygons, may have only limited use.
 
@@ -128,15 +129,15 @@ The square and triangle admit of such dissections into identical square or trian
 
 Hexagonal tiles are a bit trickier, but some careful thought shows that readable subtiles with 3, 7, 19, 37 and higher numbers are possible (and anything much above 7 seems unlikely anyway!) The 7 subtiles 'dissection' is identical to the subtiles used in Uber's H3 indexing scheme, and is really just a rescaling (by $1/\sqrt{7}$) and rotation. 19 subtiles can be formed in the same way but with a 3-4-5-4-3 hexagon of subtiles. Introducing a 'margin' around each grouping could enable individual subtiles to be identified 'indexically'.
 
-![](images/hex-subtiles.png)
+![](../images/hex-subtiles.png)
 
 Note that this approach leans on the idea that any periodic tiling can be considered as some dissection of one of the regular tilings. This might be a subset of tilings that we are interested in. Potentially interesting is that numerous dissections of any regular tiling are possible, including those that omit some subtiles. For example plausible hex-based subdivisisions of a hexagaonal 'main' tile from 8 to 19 elements are shown below. These all start from the 19 hexagon 3-4-5-4-3 subtiling and symmetrically omit a suitable number of tiles to give the desired number of elements.
 
-![](images/8-to-19-subhexes.png)
+![](../images/8-to-19-subhexes.png)
 
 Carrying this thought further, we can consider various potential dissections of the three regular tilings. For any even number of classes, a basket weave with equal numbers of strands in each direction would also be an obvious option. For any number of classes divisible by 3, triaxial weaves are similarly an obvious option. Triangle grids can only really subdivided as rhombuses otherwise orientation is liable to lead to confusion.
 
-![](images/regular-polygon-dissections.png)
+![](../images/regular-polygon-dissections.png)
 
 But a lot more options than this present themselves: after all a hexagon can be subdivided into triangles also, from which polyiamonds of various shapes and sizes can be assembled. See [Polyiamond hexagon tiling](http://recmath.org/PolyCur/mhexagons/index.html). Squares can be similarly dissected by polyominoes, although in general it seems harder to do this with identical polyominoes (which might not be a problem for us!)
 
@@ -145,7 +146,7 @@ Anyway... the TL;DR; is that some suggested set of dissection tilings could be a
 ## Dual tilings
 It would be good to be able to make duals of tilings [**UPDATE** now we can, more or less... at least up to labelling]. The duals of the Archimedean tilings, the Laves tilings provide examples, many of which look interesting as possible map tilings. Note that 3 of these are the regular tilings by triangles, squares and hexagons, and that one $[3\cdot6\cdot3\cdot6]$ is the cube weave which we can already generate. All are isohedral *because* their dual tilings are isogonal.
 
-![](images/laves-tilings.png)(from Kaplan, p32)
+![](../images/laves-tilings.png)(from Kaplan, p32)
 
 The Laves tilings are also important as the basis for the 81 distinct isohedral tilings identified by GS87. I have no idea why these are the basis, although the fact they are all monohedral is obviously both a prerequisite and also (at least initially) surprising. However, since these are the dual tilings of tilings whose key property is that they have only one species of vertex, this is not *actually* suprising!
 
@@ -159,7 +160,7 @@ Some examples are shown below.
 ### The 3<sup>2</sup>.4.3.4 tiling and Cairo tiling (its dual)
 The repeating unit of both these tilings is square. It probably makes more sense to generate a prototile consisting of complete subtiles as shown, rather than to cut the subtiles at the square unit boundaries. Note how the areas where the subtiles exceed the base unit on one side match the missing areas on the opposite side.
 
-![](images/33434-and-cairo.png)(see also [33434 tiles](example-tiles-33434.ipynb) and [Cairo tiles](example-tiles-cairo.ipynb))
+![](../images/33434-and-cairo.png)(see also [33434 tiles](../examples/example-tiles-33434.ipynb) and [Cairo tiles](../examples/example-tiles-cairo.ipynb))
 
 Under [the code as it stands](#the-code-as-it-stands) below some notebook examples are linked.
 
@@ -168,22 +169,21 @@ Note that the codebase now provides `tiling.get_dual_tiling()` which more or les
 ## Escherian tilings
 This is an informal name for tiles that modify a simple base tile by replacing straight line segment edges with more complex arcs or 'polylines'. Paying attention to the symmetries of the base tile (square, triangle or hexagon) the replacement edge can be repeated or mirrored or rotated on other edges to give a range of 81 distinct isohedral tilings based on changes in shape alone. This is essentially the technique used by Escher. A simple example is shown below based on $(4^4)$.
 
-![](images/escherian.png)
+![](../images/escherian.png)
 
-(see ['wobbly-edged' Escherian tiles](example-tiles-wobbly-escherian.ipynb))
+(see ['wobbly-edged' Escherian tiles](../examples/example-tiles-wobbly-escherian.ipynb))
 
 **NOTE**: need to read this material more closely&mdash;have a general handle on it, but exactly how it works might be relevant to developing code, I think. See for example, Kaplan's  [TactileJS](https://github.com/isohedral/tactile-js).
 
 ## Examples of what the code can do
 Some examples are provided in the following notebooks. Some of these use the built-in tiling options, others are 'handcrafted'.
 
-+ [Tiled annuli symbols](https://github.com/DOSull/weaving-space/blob/main/example-tiles-annuli.ipynb)
-+ [Arrow head tiles](https://github.com/DOSull/weaving-space/blob/main/example-tiles-arrows.ipynb)
-+ [Cairo tiles](https://github.com/DOSull/weaving-space/blob/main/example-tiles-cairo.ipynb)
-+ [The 3<sup>2</sup>.4.3.4 tiling](https://github.com/DOSull/weaving-space/blob/main/example-tiles-33434.ipynb)
-+ ['Wobbly edged' Escher tiles](https://github.com/DOSull/weaving-space/blob/main/example-tiles-wobbly-escherian.ipynb)
-+ [The 4.8<sup>2</sup> octagonal tiling](https://github.com/DOSull/weaving-space/blob/main/example-tiles-octagons.ipynb)
-+ ['H3' tiling](https://github.com/DOSull/weaving-space/blob/main/example-tiles-h3.ipynb)
++ [Tiled annuli symbols](https://github.com/DOSull/weavingspace/blob/main/examples/example-tiles-annuli.ipynb)
++ [Arrow head tiles](https://github.com/DOSull/weavingspace/blob/main/examples/example-tiles-arrows.ipynb)
++ [Cairo tiles](https://github.com/DOSull/weavingspace/blob/main/examples/example-tiles-cairo.ipynb)
++ [The 3<sup>2</sup>.4.3.4 tiling](https://github.com/DOSull/weavingspace/blob/main/examples/example-tiles-33434.ipynb)
++ ['Wobbly edged' Escher tiles](https://github.com/DOSull/weavingspace/blob/main/examples/example-tiles-wobbly-escherian.ipynb)
++ [The 4.8<sup>2</sup> octagonal tiling](https://github.com/DOSull/weavingspace/blob/main/examples/example-tiles-octagons.ipynb)
 
 
 ## References

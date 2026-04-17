@@ -1,4 +1,4 @@
-"""See https://github.com/DOSull/weaving-space/blob/main/examples/using-the-library.ipynb)
+"""See https://github.com/DOSull/weavingspace/blob/main/examples/using-the-library.ipynb)
 for introductory usage guidance."""
 
 ## Don't rearrange the order of imports!

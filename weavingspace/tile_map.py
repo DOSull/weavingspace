@@ -18,6 +18,7 @@ from time import perf_counter
 import geopandas as gpd
 import matplotlib.colors
 import matplotlib.pyplot as plt
+
 import numpy as np
 import pandas as pd
 import shapely.affinity as affine
@@ -229,6 +230,8 @@ class Tiling:
   """the tiles after tiling has been carried out."""
   prototiles:gpd.GeoDataFrame
   """the prototiles after tiling has been carried out."""
+  reg_prototiles:gpd.GeoDataFrame
+  """the regularised prototiles after tiling has been carried out."""
   rotation:float
   """additional rotation applied to the tiling beyond any that might have
   been 'baked in' to the Tileable."""
@@ -260,7 +263,7 @@ class Tiling:
       self.tileable,
       self.region.geometry if as_icons else gpd.GeoSeries([self.region_union]),
       as_icons)
-    self.tiles, self.prototiles = self.make_tiling()
+    self.tiles, self.prototiles, self.reg_prototiles = self.make_tiling()
     self.tiles.sindex # again this probably speeds up overlay
 
 
@@ -315,6 +318,8 @@ class Tiling:
       TiledMap: a TiledMap of the region with attributes attached to tiles.
 
     """
+    # this to avoid clashes with 'area' which is a plausible column name
+    area_name = "my_ridiculous_area_name_42"
     if debug:
       t1 = perf_counter()
 
@@ -359,7 +364,7 @@ class Tiling:
         if debug:
           t3 = perf_counter()
           print(f"STEP A2: overlay zones with tiling: {t3 - t2:.3f}")
-        overlaps["area"] = overlaps.geometry.area
+        overlaps[area_name] = overlaps.geometry.area
         if debug:
           t4 = perf_counter()
           print(f"STEP A3: calculate areas: {t4 - t3:.3f}")
@@ -369,7 +374,7 @@ class Tiling:
           print(f"STEP A4: drop columns prior to join: {t5 - t4:.3f}")
         # make a lookup by largest area tile to region id
         lookup = overlaps \
-          .iloc[overlaps.groupby("joinUID")["area"] \
+          .iloc[overlaps.groupby("joinUID")[area_name] \
           .agg(pd.Series.idxmax)][["joinUID", id_var]]
       # now join the lookup and from there the region data
       if debug:
@@ -450,12 +455,16 @@ class Tiling:
     prototiles = itertools.chain(*[
       self.tileable.prototile.geometry.translate(p.x, p.y)
       for p in self.grid.points])
+    reg_prototiles = itertools.chain(*[
+      self.tileable.regularised_prototile.geometry.translate(p.x, p.y)
+      for p in self.grid.points])
     # replicate the tile ids
     tile_ids = list(self.tileable.tiles.tile_id) * len(self.grid.points)
     prototile_ids = list(range(len(self.grid.points)))
     tile_prototile_ids = sorted(prototile_ids * self.tileable.tiles.shape[0])
     tiles_gs = gpd.GeoSeries(list(tiles))
     prototiles_gs = gpd.GeoSeries(list(prototiles))
+    reg_prototiles_gs = gpd.GeoSeries(list(reg_prototiles))
     # assemble and return as GeoDataFrames
     tiles_gdf = gpd.GeoDataFrame(
       data = {"tile_id": tile_ids, "prototile_id": tile_prototile_ids},
@@ -463,7 +472,25 @@ class Tiling:
     prototiles_gdf = gpd.GeoDataFrame(
       data = {"prototile_id": prototile_ids},
       geometry = prototiles_gs, crs = self.tileable.crs)
-    return tiles_gdf, prototiles_gdf
+    reg_prototiles_gdf = gpd.GeoDataFrame(
+      data = {"prototile_id": prototile_ids},
+      geometry = reg_prototiles_gs, crs = self.tileable.crs)
+    return tiles_gdf, prototiles_gdf, reg_prototiles_gdf
+
+
+  def get_prototiles_background(self):
+    return gpd.GeoSeries([p for p in self.prototiles.geometry
+                          if p.intersects(self.region_union)])
+
+
+  def get_regularised_prototiles_background(self):
+    return gpd.GeoSeries([p for p in self.reg_prototiles.geometry
+                          if p.intersects(self.region_union)])
+
+  def get_merged_tiles_background(self):
+    return gpd.GeoSeries([
+      p for p in self.tiles.dissolve(by = "prototile_id").geometry
+      if p.intersects(self.region_union)])
 
 
   def rotated(self,
@@ -587,6 +614,10 @@ class TiledMap:
   _colourspecs:dict[str,dict] = None
   """dictionary of dictionaries keyed by the items in `ids_to_use` with each
   dictionary forming additional kwargs to be supplied to geopandas.plot()."""
+  vmins:[int|float|None] = None
+  """list of vmin settings for each variable"""
+  vmaxs:[int|float|None] = None
+  """list of vmax settings for each variable"""
   add_buffer:bool = False
   """if True then include a buffer of all tiles as a background"""
   buffer_colour:str = "grey"
@@ -705,7 +736,7 @@ class TiledMap:
     else:
       fig, axes = plt.subplots(1, 1, figsize = self.figsize,
                                layout = "constrained", **kwargs)
-
+    
     self._plot_map(axes, **kwargs)
     return fig
 
@@ -781,7 +812,7 @@ class TiledMap:
         del cspec["column"]
         del cspec["cmap"]
         del cspec["scheme"]
-      elif not cspec["categorical"] and n_values < cspec["k"]:
+      elif not cspec["categorical"] and cspec["scheme"] is not None and n_values < cspec["k"]:
         cspec["k"] = n_values
       elif cspec["categorical"]:
         del cspec["scheme"]
@@ -922,7 +953,7 @@ class TiledMap:
       #   data_vals = sorted(d)
       #   freqs = [1] * len(data_vals)
       data_vals = sorted(d)
-      key = self.tiling.tileable._get_legend_key_shapes(          # type: ignore
+      key = self.tiling.tileable._get_legend_key_shapes( # type: ignore
         geom, [1] * len(data_vals), rot, False)
       key_tiles.extend(key)
       vals.extend(data_vals)
@@ -1017,8 +1048,7 @@ class TiledMap:
         self.schemes_to_use = [self.schemes_to_use] * len(self.ids_to_map)
       elif self.schemes_to_use is None or not isinstance(self.schemes_to_use, Iterable):
         # provide a set of defaults
-        self.schemes_to_use = [None if cat else "EqualInterval"
-                              for cat in self.categoricals]
+        self.schemes_to_use = [None] * len(self.ids_to_map)
       # print(f"{self.schemes_to_use=}")
       
       if isinstance(self.colors_to_use, str):
@@ -1037,13 +1067,19 @@ class TiledMap:
 
       if isinstance(self.n_classes, int):
         if self.n_classes == 0:
-          self.n_classes = [255] * len(self.ids_to_map)
+          self.n_classes = [None] * len(self.ids_to_map)
         else:
           self.n_classes = [self.n_classes] * len(self.ids_to_map)
       elif self.n_classes is None or not isinstance(self.n_classes, Iterable):
         # provide a set of defaults
-        self.n_classes = [None if cat else 100 for cat in self.categoricals] 
+        self.n_classes = [None if cat else None for cat in self.categoricals] 
       # print(f"{self.n_classes=}")
+
+      if not isinstance(self.vmins, Iterable):
+        self.vmins = [None] * len(self.ids_to_map)
+
+      if not isinstance(self.vmaxs, Iterable):
+        self.vmaxs = [None] * len(self.ids_to_map)
 
     except IndexError as e:
       e.add_note("""One or more of the supplied lists of mapping settings is 
@@ -1055,11 +1091,15 @@ class TiledMap:
            "cmap": c,
            "categorical": cat,
            "scheme": s,
-           "k": k}
-      for ID, v, c, cat, s, k 
+           "k": k,
+           "vmin": vmin,
+           "vmax": vmax}
+      for ID, v, c, cat, s, k, vmin, vmax 
       in zip(self.ids_to_map,
              self.vars_to_map,
              self.colors_to_use,
              self.categoricals,
              self.schemes_to_use,
-             self.n_classes, strict = False)}
+             self.n_classes, 
+             self.vmins,
+             self.vmaxs, strict = False)}
