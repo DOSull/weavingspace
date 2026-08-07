@@ -143,7 +143,12 @@ class _TileGrid:
     # buffer the region by an amount dictated by the size of the tile unit
     bb = self.tile_unit.tiles.total_bounds
     diagonal = np.hypot(bb[2] - bb[0], bb[3] - bb[1])
-    return (region_to_tile.union_all().buffer(diagonal)
+    # note interpolated convex_hull operations to speed this step up
+    return (region_to_tile
+            .convex_hull
+            .union_all("coverage")
+            .convex_hull
+            .buffer(diagonal)
             .minimum_rotated_rectangle)
 
 
