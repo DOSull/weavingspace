@@ -143,16 +143,9 @@ class _TileGrid:
     # buffer the region by an amount dictated by the size of the tile unit
     bb = self.tile_unit.tiles.total_bounds
     diagonal = np.hypot(bb[2] - bb[0], bb[3] - bb[1])
-    # note interpolated convex_hull operations to speed this step up
-    # this optimisation suggested by Claude...
+    # convex hull avoids buffering potential very complex region multipolygon
     hull = shapely.convex_hull(geom.GeometryCollection(region_to_tile.values))
     return hull.buffer(diagonal).minimum_rotated_rectangle
-    # return (region_to_tile
-    #         .convex_hull
-    #         .union_all("coverage")
-    #         .convex_hull
-    #         .buffer(diagonal)
-    #         .minimum_rotated_rectangle)
 
 
   def _get_transforms(self) -> tuple[tuple[float,...],tuple[float,...]]:
@@ -428,8 +421,15 @@ class Tiling:
         print(f"STEP B2: overlay tiling with zones: {t7 - t2:.3f}")
 
     if not retain_tileables:
-      tiled_map = tiled_map.loc[
-        shapely.intersects(self.region_union, np.array(tiled_map.geometry)), :]
+      # tiled_map = tiled_map.loc[
+      #   shapely.intersects(self.region_union, np.array(tiled_map.geometry)), :]
+      # below is quicker, but build tree on region geometries, not their union
+      tree = shapely.STRtree(self.region.geometry.values)
+      hits = tree.query(
+        np.array(tiled_map.geometry), predicate = "intersects")[0]
+      keep = np.zeros(len(tiled_map), dtype = bool)
+      keep[np.unique(hits)] = True
+      tiled_map = tiled_map.loc[keep, :]
 
     # inplace changes considered unsafe, BUT not dropping id_var in this
     # causes it to persist in the tiled_map and region dataframes!
@@ -468,16 +468,6 @@ class Tiling:
     return dzid
 
 
-  def _to_grid_points(self, tiles:gpd.GeoDataFrame) -> gpd.GeoSeries:
-    dxy = zip(shapely.get_x(self.grid.points.geometry.values),
-              shapely.get_y(self.grid.points.geometry.values), strict = True)
-    base = tiles.geometry.array
-    return np.concatenate([
-      shapely.transform(
-        base, lambda c, dxdy = dxdy: c + dxdy, include_z = False)
-      for dxdy in dxy])
-
-
   def make_tiling(self) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """Tile the region with a tile unit, returning a GeoDataFrame.
 
@@ -489,17 +479,9 @@ class Tiling:
     # we assume the geometry column is called geometry so make it so...
     if self.region.geometry.name != "geometry":
       self.region = self.region.rename_geometry("geometry")
-    # chain list of lists of GeoSeries geometries to list of geometries
-    # tiles = itertools.chain(*[
-    #   self.tileable.tiles.geometry.translate(p.x, p.y)
-    #   for p in self.grid.points])
-    # prototiles = itertools.chain(*[
-    #   self.tileable.prototile.geometry.translate(p.x, p.y)
-    #   for p in self.grid.points])
-    # reg_prototiles = itertools.chain(*[
-    #   self.tileable.regularised_prototile.geometry.translate(p.x, p.y)
-    #   for p in self.grid.points])
-    # this optimisation suggested by Claude (see _to_grid_points)
+    # previous code iteratively applied translate to many GeoSeries
+    # which were then chained together and discarded
+    # this optimisation (in _to_grid_points) doesn't go via GeoSeries at all
     tiles = self._to_grid_points(self.tileable.tiles)
     prototiles = self._to_grid_points(self.tileable.prototile)
     reg_prototiles = self._to_grid_points(self.tileable.regularised_prototile)
@@ -523,16 +505,64 @@ class Tiling:
     return tiles_gdf, prototiles_gdf, reg_prototiles_gdf
 
 
-  def get_prototiles_background(self):
+  def _to_grid_points(self, tiles:gpd.GeoDataFrame) -> gpd.GeoSeries:
+    """Translate-copies supplied tiles to Tiling grid points.
+
+    Args:
+      tiles: GeoDataFrame (of tiles, prototiles or reg_prototiles) to be
+        copied and translated.
+
+    Returns:
+      GeoSeries: copied and translated tiles.
+
+    """
+    dxy = zip(shapely.get_x(self.grid.points.geometry.values),
+              shapely.get_y(self.grid.points.geometry.values), strict = True)
+    base = tiles.geometry.array
+    return np.concatenate([
+      shapely.transform(
+        base, lambda c, dxdy = dxdy: c + dxdy, include_z = False)
+      for dxdy in dxy])
+
+
+  def get_prototiles_background(self) -> gpd.GeoSeries:
+    """Get a set of prototiles as a 'background' layer for visualization.
+
+    Note: provided for possible use, not required elsewhere in module.
+    Introduced while making figures for Cartographic Perspectives article.
+
+    Returns:
+      GeoSeries: prototiles that intersect the tiled region.
+
+    """
     return gpd.GeoSeries([p for p in self.prototiles.geometry
                           if p.intersects(self.region_union)])
 
 
-  def get_regularised_prototiles_background(self):
+  def get_regularised_prototiles_background(self) -> gpd.GeoSeries:
+    """Get a set of regularised prototiles for visualization.
+
+    Note: provided for possible use, not required elsewhere in module.
+    Introduced while making figures for Cartographic Perspectives article.
+
+    Returns:
+      GeoSeries: regularised prototiles that intersect the tiled region.
+
+    """
     return gpd.GeoSeries([p for p in self.reg_prototiles.geometry
                           if p.intersects(self.region_union)])
 
-  def get_merged_tiles_background(self):
+
+  def get_merged_tiles_background(self) -> gpd.GeoSeries:
+    """Merge tiling tiles and return GeoSeries.
+
+    Note: provided for possible use, not required elsewhere in module.
+    Introduced while making figures for Cartographic Perspectives article.
+
+    Returns:
+      GeoSeries: the Tiling's tiles combined.
+
+    """
     return gpd.GeoSeries([
       p for p in self.tiles.dissolve(by = "prototile_id").geometry
       if p.intersects(self.region_union)])
