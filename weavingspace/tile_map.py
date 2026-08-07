@@ -144,12 +144,15 @@ class _TileGrid:
     bb = self.tile_unit.tiles.total_bounds
     diagonal = np.hypot(bb[2] - bb[0], bb[3] - bb[1])
     # note interpolated convex_hull operations to speed this step up
-    return (region_to_tile
-            .convex_hull
-            .union_all("coverage")
-            .convex_hull
-            .buffer(diagonal)
-            .minimum_rotated_rectangle)
+    # this optimisation suggested by Claude...
+    hull = shapely.convex_hull(geom.GeometryCollection(region_to_tile.values))
+    return hull.buffer(diagonal).minimum_rotated_rectangle
+    # return (region_to_tile
+    #         .convex_hull
+    #         .union_all("coverage")
+    #         .convex_hull
+    #         .buffer(diagonal)
+    #         .minimum_rotated_rectangle)
 
 
   def _get_transforms(self) -> tuple[tuple[float,...],tuple[float,...]]:
@@ -417,7 +420,7 @@ class Tiling:
         print(f"STEP A6: perform lookup join: {t7 - t6:.3f}")
       tiled_map = tiled_map.drop(columns = ["joinUID"])
 
-    else:  
+    else:
       # here it's a simple overlay
       tiled_map = self.region.overlay(tiled_map)
       t7 = perf_counter()
@@ -427,7 +430,7 @@ class Tiling:
     if not retain_tileables:
       tiled_map = tiled_map.loc[
         shapely.intersects(self.region_union, np.array(tiled_map.geometry)), :]
-    
+
     # inplace changes considered unsafe, BUT not dropping id_var in this
     # causes it to persist in the tiled_map and region dataframes!
     tiled_map.drop(columns = [id_var], inplace = True)
@@ -465,6 +468,16 @@ class Tiling:
     return dzid
 
 
+  def _to_grid_points(self, tiles:gpd.GeoDataFrame) -> gpd.GeoSeries:
+    dxy = zip(shapely.get_x(self.grid.points.geometry.values),
+              shapely.get_y(self.grid.points.geometry.values), strict = True)
+    base = tiles.geometry.array
+    return np.concatenate([
+      shapely.transform(
+        base, lambda c, dxdy = dxdy: c + dxdy, include_z = False)
+      for dxdy in dxy])
+
+
   def make_tiling(self) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """Tile the region with a tile unit, returning a GeoDataFrame.
 
@@ -476,24 +489,27 @@ class Tiling:
     # we assume the geometry column is called geometry so make it so...
     if self.region.geometry.name != "geometry":
       self.region = self.region.rename_geometry("geometry")
-
     # chain list of lists of GeoSeries geometries to list of geometries
-    tiles = itertools.chain(*[
-      self.tileable.tiles.geometry.translate(p.x, p.y)
-      for p in self.grid.points])
-    prototiles = itertools.chain(*[
-      self.tileable.prototile.geometry.translate(p.x, p.y)
-      for p in self.grid.points])
-    reg_prototiles = itertools.chain(*[
-      self.tileable.regularised_prototile.geometry.translate(p.x, p.y)
-      for p in self.grid.points])
+    # tiles = itertools.chain(*[
+    #   self.tileable.tiles.geometry.translate(p.x, p.y)
+    #   for p in self.grid.points])
+    # prototiles = itertools.chain(*[
+    #   self.tileable.prototile.geometry.translate(p.x, p.y)
+    #   for p in self.grid.points])
+    # reg_prototiles = itertools.chain(*[
+    #   self.tileable.regularised_prototile.geometry.translate(p.x, p.y)
+    #   for p in self.grid.points])
+    # this optimisation suggested by Claude (see _to_grid_points)
+    tiles = self._to_grid_points(self.tileable.tiles)
+    prototiles = self._to_grid_points(self.tileable.prototile)
+    reg_prototiles = self._to_grid_points(self.tileable.regularised_prototile)
+    tiles_gs = gpd.GeoSeries(list(tiles))
+    prototiles_gs = gpd.GeoSeries(list(prototiles))
+    reg_prototiles_gs = gpd.GeoSeries(list(reg_prototiles))
     # replicate the tile ids
     tile_ids = list(self.tileable.tiles.tile_id) * len(self.grid.points)
     prototile_ids = list(range(len(self.grid.points)))
     tile_prototile_ids = sorted(prototile_ids * self.tileable.tiles.shape[0])
-    tiles_gs = gpd.GeoSeries(list(tiles))
-    prototiles_gs = gpd.GeoSeries(list(prototiles))
-    reg_prototiles_gs = gpd.GeoSeries(list(reg_prototiles))
     # assemble and return as GeoDataFrames
     tiles_gdf = gpd.GeoDataFrame(
       data = {"tile_id": tile_ids, "prototile_id": tile_prototile_ids},
@@ -502,7 +518,7 @@ class Tiling:
       data = {"prototile_id": prototile_ids},
       geometry = prototiles_gs, crs = self.tileable.crs)
     reg_prototiles_gdf = gpd.GeoDataFrame(
-      data = {"prototile_id": prototile_ids},
+      data = {"prototile_id": tile_prototile_ids},
       geometry = reg_prototiles_gs, crs = self.tileable.crs)
     return tiles_gdf, prototiles_gdf, reg_prototiles_gdf
 
