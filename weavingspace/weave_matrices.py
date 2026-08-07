@@ -1,3 +1,31 @@
+"""
+MIT License
+
+Copyright (c) 2021-26 David O'Sullivan & Luke Bergmann
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
 """Functions to generate the matrices associated with woven patterns.
 
 Such patterns when repeated across a map area give the appearance of a woven
@@ -22,11 +50,6 @@ where weaving is shown to be a matrix multiplication of tie-up, threading and
 treadling matrices. An accessible introduction can be found at
 https://www.youtube.com/watch?v=oMOSiag3dxg
 """
-
-from __future__ import annotations
-
-import numpy as np
-
 
 def reps_needed(x1:int, x2:int) -> tuple[int, int]:
   """Return number of sequences of length x1 and x2 are needed to match lengths.
@@ -381,4 +404,3 @@ def get_weave_pattern_matrix(
       reps_needed(nr, len(wefts))[1] * nc).reshape((nc, nr)).transpose()
   # encode to reflect missing threads
   return _encode_biaxial_weave(p, warp_threads, weft_threads)
-

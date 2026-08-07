@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: weavingspace
-Version: 0.0.7.59
+Version: 0.0.7.61
 Summary: A package for making tiled mapping layers
 Author-email: David O'Sullivan <osullivan512@gmail.com>
 License-Expression: MIT
@@ -12,6 +12,8 @@ Requires-Python: >=3.12
 Description-Content-Type: text/markdown
 License-File: LICENSE.md
 Requires-Dist: dataclasses
+Requires-Dist: matplotlib
+Requires-Dist: fiona
 Requires-Dist: geopandas
 Requires-Dist: mapclassify
 Requires-Dist: networkx

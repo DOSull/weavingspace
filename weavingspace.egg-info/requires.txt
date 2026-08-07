@@ -1,4 +1,6 @@
 dataclasses
+matplotlib
+fiona
 geopandas
 mapclassify
 networkx
