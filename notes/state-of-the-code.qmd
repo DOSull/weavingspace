@@ -46,7 +46,7 @@ At the moment the `Topology` class enables a number of transformations of tiling
 + ['Push' a vertex](https://dosull.github.io/weavingspace/doc/weavingspace/topology.html#Topology.push_vertex) will move a [vertex](#vertex) in the direction of the resultant unit vector of its incoming incident [edges](#edge).
 + [Nudge a vertex](https://dosull.github.io/weavingspace/doc/weavingspace/topology.html#Topology.nudge_vertex) will move all [vertices](#vertex) in a specifed [transitivity class](#transitivity-class) by a given displacement. This almost always makes tiles non-similar.
 
-Some examples of these can be seen in [this notebook](https://dosull.github.io/weavingspace/examples/topology-working.ipynb), although a less impenetrable interface to applying transformations is likely required.
+Some examples of these can be seen in [this notebook](https://github.com/DOSull/weavingspace/blob/main/examples/topology-working.ipynb), although a less impenetrable interface to applying transformations is likely required.
 
 It's also worth noting that the `Topology` class offers a likely more reliable way to generate dual tilings, than the [`tiling_utils.get_dual_tile_unit_`](https://dosull.github.io/weavingspace/doc/weavingspace/tiling_utils.html#get_dual_tile_unit) function.
 
@@ -54,9 +54,9 @@ It's also worth noting that the `Topology` class offers a likely more reliable w
 The tile [corner](#corner) / tiling [vertex](#vertex) distinction is not carefully observed in the code. The [transitivity class](#transitivity-class) implementation should make this easier to do. For example it should be easy enough now to *not* label corners, as the logic of tiling symmetry implies.
 
 ## The [`symmetry` code](doc/weavingspace/symmetry.html)
-The symmetry now works, and can accurately detect the [symmetries of a tile](https://dosull.github.io/weaving-space/presentations//examples/symmetry-working.ipynb), and of a [tiling](https://dosull.github.io/weaving-space/presentations//examples/topology-working.ipynb).
+The symmetry now works, and can accurately detect the [symmetries of a tile](https://github.com/DOSull/weavingspace/blob/main/examples/symmetry-working.ipynb), and of a [tiling](https://github.com/DOSull/weavingspace/blob/main/examples/topology-working.ipynb).
 
-As seen in the [topology notebook](https://dosull.github.io/weaving-space/presentations//examples/topology-working.ipynb) we can now detect and display all the symmetries of a tiling (probably reliably).
+As seen in the [topology notebook](https://github.com/DOSull/weavingspace/blob/main/examples/topology-working.ipynb) we can now detect and display all the symmetries of a tiling (probably reliably).
 
 ## Graphs and `networkx`
 Late in the process of implementing transitivity classes, I (with some reluctance) imported `networkx` to resolve a gnarly problem of extracting the 'exclusive supersets' of a list of sets. And of course... 5 lines of graph code specifically the [`connected_components`](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.components.connected_components.html#networkx.algorithms.components.connected_components) method and the problem disappeared.
@@ -75,7 +75,7 @@ An attempt to define terms and how they relate to aspects of the code.
 A point on the perimeter of a tile polygon where the perimeter changes direction. A polygon corner in the usual sense. Distinct from a tiling [vertex](#vertex). Corners are properties of individual tiles, not of the tiling.
 
 ### Dual tiling
-The tiling formed from an existing tiling by placing a [vertex](#vertex) at each [tile](#tile) and joining them by [edges](#edge) between any two tiles that share an edge in the original tiling. Tiles become vertices and vertices become tiles. The relation is reciprocal and essentially topological not geometric, since the placement of a vertex in a tile is ill-defined. An important dual relation is that between the [Archimedean](https://en.wikipedia.org/wiki/Euclidean_tilings_by_convex_regular_polygons#Archimedean,_uniform_or_semiregular_tilings) and the [Laves](https://en.wikipedia.org/wiki/List_of_Euclidean_uniform_tilings#Laves_tilings) tilings.
+The tiling formed from an existing tiling by placing a [vertex](#vertex) in each [tile](#tile) and joining them by [edges](#edge) between any two tiles that share an edge in the original tiling. Tiles become vertices and vertices become tiles. The relation is reciprocal and essentially topological not geometric, since the placement of a vertex in a tile is ill-defined. An important dual relation is that between the [Archimedean](https://en.wikipedia.org/wiki/Euclidean_tilings_by_convex_regular_polygons#Archimedean,_uniform_or_semiregular_tilings) and the [Laves](https://en.wikipedia.org/wiki/List_of_Euclidean_uniform_tilings#Laves_tilings) tilings.
 
 ::: {layout-ncol=2}
 
@@ -92,7 +92,7 @@ The line along which two [tiles](#tile) in a tiling meet. An edge has a [vertex]
 Collective term for [tiles](#tile), [edges](#edge) and [vertices](#vertex).
 
 ### Fundamental unit
-A subset of a tiling which under two non-parallel [translations](#translation) can tile the plane. It is important to realise that the fundamental unit of a tiling is not uniquely defined. In a tiling with two orthogonal translation vectors, for example, any square region defined by those two vectors is a fundamental unit. In our implementation approximately equivalent to a [`Tileable`](#tileable).
+A subset of a tiling which under two non-parallel [translations](#translation) can tile the plane. It is important to realise that the fundamental unit of a tiling is not uniquely defined. In a tiling with two translation vectors, for example, any parallelogram shaped region defined by those two vectors is a fundamental unit. In our implementation approximately equivalent to a [`Tileable`](#tileable).
 
 ### Periodic tiling
 A tiling with two non-parallel [translations](#translation) among its [symmetries](#symmetry).
@@ -110,7 +110,7 @@ A [transformation](#transformation) of the plane around a fixed point (the centr
 A side of a polygon as commonly understood, connecting two of its [corners](#corner). Distinct from a tiling [edge](#edge). There is always a change in direction at a corner, but there may be many corners along a tiling edge. Tile [corners](#corner) and tiling [vertices](#vertex) are often coincident but a vertex is not always a corner (there might be no change in direction) and corner is not always a vertex (if it is along an edge, when it will be incident on only two tiles).
 
 ### Symmetry
-OMG. All of mathematics. But seriously... albeit briefly, in our context a symmetry is any [transformation](#transformation) of a tiling that maps its [elements](#element) back on to other elements. Tiles also have symmetries but the symmetries of a tiling and of its constituent tiles are not the same. For example in the example above of the Cairo tiling the tiles have only a single reflection symmetry (also symmetry of the tiling), but the tiling also has 90&deg; rotational symmetries.
+OMG. All of mathematics. But seriously... albeit briefly, in our context a symmetry is any [transformation](#transformation) of a tiling that maps its [elements](#element) back on to other matching elements. Tiles also have symmetries but the symmetries of a tiling and of its constituent tiles are not the same. For example in the Cairo tiling (Laves 3.3.4.3.4 in the figure above), the pentagonal tiles have only a single reflection symmetry (also a symmetry of the tiling), but the tiling also has 90&deg; rotational symmetries.
 
 ### Tile
 A polygon that when arranged in a [tiling](#tiling) exhausts the plane. A polygon is formed by straight [sides](#side) connecting [corners](#corner).
@@ -125,7 +125,7 @@ So... a close cousin to a GIS coverage then...
 A one-to-one mapping of every point in the plane to another point in the plane. 
 
 ### Transitivity class
-A group of [elements](#element) ([tiles](#tile), [vertices](#vertex), or [edges](#edge)) that map onto one another under the [symmetries](#symmetry) of the [tiling](#tiling). This concept is a subtle one. The tiling below has _two_ transitivity classes of tile, since there is no transformation that maps central tiles on to outer tiles while also mapping all tiles onto a tile. Those central tiles only ever map onto other central tiles, hence they are in a different transitivity class than the outer tiles, which form a second transitivity class. A tiling with one transitivity class is termed _isohedral_, and 2-hedral, _n_-hedral etc. are terms that are also used. Similar notions apply to vertices and edges, where the terms are respectively _isogonality_ and _isotoxality_. The isohedral tilings of the plane have been thoroughly explored (for example it is proven that there are 81 types...).
+A group of [elements](#element) ([tiles](#tile), [vertices](#vertex), or [edges](#edge)) that map onto one another under the [symmetries](#symmetry) of the [tiling](#tiling). This concept is a subtle one. The tiling below has _two_ transitivity classes of tile, since there is no transformation that maps central tiles on to outer tiles while also mapping all tiles onto a tile. Those central tiles only ever map onto other central tiles, hence they are in a different transitivity class than the outer tiles, which form a second transitivity class. A tiling with one transitivity class is termed _isohedral_, while the terms 2-hedral, _n_-hedral etc. are also used. Similar notions apply to vertices and edges, where the terms are respectively _isogonality_ and _isotoxality_. The isohedral tilings of the plane have been thoroughly explored (for example it is proven that there are 81 types...).
 
 ![the 'cheese sandwich' 2-hedral tiling](../images/basket-tiles.png)
 

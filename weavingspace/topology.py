@@ -183,7 +183,6 @@ class Topology:
     """
     shapes = self.tileable.get_local_patch(r = 1, include_0 = True).geometry
     shapes = [tiling_utils.get_clean_polygon(s) for s in shapes]
-    self.n_1_order_patch = len(shapes)
     labels = list(self.tileable.tiles.tile_id) * (len(shapes) // self.n_tiles)
     self.tiles = []
     self.points = {}
