@@ -500,7 +500,7 @@ class Tiling:
       data = {"prototile_id": prototile_ids},
       geometry = prototiles_gs, crs = self.tileable.crs)
     reg_prototiles_gdf = gpd.GeoDataFrame(
-      data = {"prototile_id": tile_prototile_ids},
+      data = {"prototile_id": prototile_ids},
       geometry = reg_prototiles_gs, crs = self.tileable.crs)
     return tiles_gdf, prototiles_gdf, reg_prototiles_gdf
 
