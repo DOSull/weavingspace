@@ -143,9 +143,14 @@ class _TileGrid:
     # buffer the region by an amount dictated by the size of the tile unit
     bb = self.tile_unit.tiles.total_bounds
     diagonal = np.hypot(bb[2] - bb[0], bb[3] - bb[1])
+    # ---AI-suggested-code-starts---
     # convex hull avoids buffering potential very complex region multipolygon
+    # and constructing the hull on the GeometryCollection of points gives the
+    # same effective result
+    # previous versions buffered that complex region and were slower
     hull = shapely.convex_hull(geom.GeometryCollection(region_to_tile.values))
     return hull.buffer(diagonal).minimum_rotated_rectangle
+    # ---AI-suggested-code-ends---
 
 
   def _get_transforms(self) -> tuple[tuple[float,...],tuple[float,...]]:
@@ -421,15 +426,17 @@ class Tiling:
         print(f"STEP B2: overlay tiling with zones: {t7 - t2:.3f}")
 
     if not retain_tileables:
-      # tiled_map = tiled_map.loc[
-      #   shapely.intersects(self.region_union, np.array(tiled_map.geometry)), :]
-      # below is quicker, but build tree on region geometries, not their union
+      # ---AI-suggested-code-starts---
+      # previous code performed an intersection test on the region_union, which
+      # is a large complex multipolygon; the suggested approach is quicker
+      # Note that tree is built on region geometries, not their union
       tree = shapely.STRtree(self.region.geometry.values)
       hits = tree.query(
         np.array(tiled_map.geometry), predicate = "intersects")[0]
       keep = np.zeros(len(tiled_map), dtype = bool)
       keep[np.unique(hits)] = True
       tiled_map = tiled_map.loc[keep, :]
+      # ---AI-suggested-code-ends---
 
     # inplace changes considered unsafe, BUT not dropping id_var in this
     # causes it to persist in the tiled_map and region dataframes!
@@ -479,12 +486,14 @@ class Tiling:
     # we assume the geometry column is called geometry so make it so...
     if self.region.geometry.name != "geometry":
       self.region = self.region.rename_geometry("geometry")
+    # ---AI-suggested-code-starts---
     # previous code iteratively applied translate to many GeoSeries
-    # which were then chained together and discarded
-    # this optimisation (in _to_grid_points) doesn't go via GeoSeries at all
+    # which were then itertools.chained together and discarded; the
+    # optimisation (implemented in _to_grid_points) doesn't use GeoSeries at all
     tiles = self._to_grid_points(self.tileable.tiles)
     prototiles = self._to_grid_points(self.tileable.prototile)
     reg_prototiles = self._to_grid_points(self.tileable.regularised_prototile)
+    # ---AI-suggested-code-starts---
     tiles_gs = gpd.GeoSeries(list(tiles))
     prototiles_gs = gpd.GeoSeries(list(prototiles))
     reg_prototiles_gs = gpd.GeoSeries(list(reg_prototiles))
@@ -505,6 +514,10 @@ class Tiling:
     return tiles_gdf, prototiles_gdf, reg_prototiles_gdf
 
 
+  # ---AI-suggested-code-starts---
+  # This helper method translates and copies the supplied tiles to the points
+  # stored in grid.points using shapely.transform and a lambda function that
+  # makes the translation into an array addition operation.
   def _to_grid_points(self, tiles:gpd.GeoDataFrame) -> gpd.GeoSeries:
     """Translate-copies supplied tiles to Tiling grid points.
 
@@ -523,6 +536,7 @@ class Tiling:
       shapely.transform(
         base, lambda c, dxdy = dxdy: c + dxdy, include_z = False)
       for dxdy in dxy])
+  # ---AI-suggested-code-ends---
 
 
   def get_prototiles_background(self) -> gpd.GeoSeries:
