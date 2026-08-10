@@ -396,11 +396,7 @@ def _setup_laves(unit:TileUnit) -> str|None:
       _setup_laves_3_3_3_3_6(unit)
     case "3.3.3.4.4":
       # this is a boring tiling...
-      _setup_archimedean_3_3_3_4_4(unit)
-      unit.tiles = tiling_utils.get_dual_tile_unit(unit)
-      unit.tiles.geometry = gpd.GeoSeries(
-        [affine.translate(p, -unit.spacing / np.sqrt(1 + sqrt3) / 2, 0)
-         for p in unit.tiles.geometry])
+      _setup_laves_3_3_3_4_4(unit)
     case "3.3.4.3.4":
       # king of tilings!
       _setup_cairo(unit)
@@ -471,6 +467,38 @@ def _setup_laves_3_3_3_3_6(unit:TileUnit) -> None:
     data = {"tile_id": list("abcdef")},
     crs = unit.crs,
     geometry = gpd.GeoSeries(petals))
+
+
+def _setup_laves_3_3_3_4_4(unit:TileUnit) -> None:
+  """Set up Laves [3.3.3.4.4] which is like two houses back to back.
+
+  Similar to the H3 7 hexagon group with the central hex removed and each
+  hex 'taking' a 1/6 share of the central hex.
+
+  Args:
+    unit (TileUnit):  the TileUnit to setup.
+
+  """
+  x = unit.spacing / np.sqrt(2)
+  tile1 = geom.Polygon([
+    ( x/2,  0),
+    ( x/2,  x * (0.5 + sqrt3/6)),
+    (   0,  x * (0.5 + sqrt3/3)),
+    (-x/2,  x * (0.5 + sqrt3/6)),
+    (-x/2,  0),
+  ])
+  tile2 = geom.Polygon([
+    (-x/2,  0),
+    (-x/2, -x * (0.5 + sqrt3/6)),
+    (   0, -x * (0.5 + sqrt3/3)),
+    ( x/2, -x * (0.5 + sqrt3/6)),
+    ( x/2,  0),
+  ])
+  unit.setup_vectors((x, 0), (x / 2, x * (1 + sqrt3 / 2)))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": list("ab")},
+    crs = unit.crs,
+    geometry = gpd.GeoSeries([tile1, tile2]))
 
 
 def _setup_laves_3_12_12(unit:TileUnit) -> None:

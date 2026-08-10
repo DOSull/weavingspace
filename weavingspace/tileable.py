@@ -133,7 +133,7 @@ class Tileable:
     """
     vectors = list(args)
     # extend list to include the inverse vectors too
-    for v in args:
+    for v in list(args):
       vectors = [*vectors, (-v[0], -v[1])]
     if len(vectors) == 4:
       i = [1, 0, -1,  0]
@@ -324,6 +324,34 @@ class Tileable:
                      if i not in done_frags] + next_frags
     self.regularised_prototile.loc[0, "geometry"] = reg_prototile
     return [f for f in fragments if not f.is_empty] # don't return any duds
+
+
+  def _augment_vectors(self) -> list[tuple[float]]:
+    """Get vectors with 'diagonal' and inverse vectors added to current set.
+
+    This may be useful if code is changed to work with only two translation
+    vectors for all tilings, particularly in the _merge_fragments code, which
+    has to check for fragments that merge due to 'diagonal' translation
+    neighbours.
+
+    Note: not currently used.
+
+    Returns:
+      list(tuple[float]): the augmented set of vectors.
+
+    """
+    v = list(self.vectors.values())
+    v0 = v[0]
+    v1 = v[1]
+    v2 = tuple(x + y for x, y in zip(v1, v0, strict = True))
+    v3 = tuple(x - y for x, y in zip(v1, v0, strict = True))
+    return [
+      v0, v1, v2, v3,
+      tuple(-x for x in v0),
+      tuple(-x for x in v1),
+      tuple(-x for x in v2),
+      tuple(-x for x in v3)
+    ]
 
 
   def get_local_patch(
