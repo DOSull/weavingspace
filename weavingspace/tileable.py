@@ -90,7 +90,15 @@ class Tileable:
                **kwargs,  # noqa: ANN003
               ) -> None:
     for k, v in kwargs.items():
-      if isinstance(v, str):
+      # Note: We lower-case all string arguments, but NOT strand codes to allow
+      # both lower and upper-case WeaveUnit tile_ids. This is for consistency
+      # with TileUnits which admit that possibility. In fact arbitrary TileUnit
+      # tile_ids are allowed, since they can be reassigned later by a user via
+      # TileUnit.tiles.tile_id = <a_list_of_strings> and are not checked. For
+      # WeaveUnits explicit assignment of tile_ids is needed on construction and
+      # the encoding method means that only single character codes can be used.
+      # Allowing both cases doubles the available codes to an unlikely 52.
+      if isinstance(v, str) and k != "strands":
         # make any string arguments lower case
         self.__dict__[k] = v.lower()
       else:

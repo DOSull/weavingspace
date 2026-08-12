@@ -77,15 +77,18 @@ mathematical literature between tiling vertices and tile corners, or between
 tiling edges and tile sides.
 """
 
-# all two letter combinations of the alphabet for labelling
+# all two letter pairs of the alphabet for labelling
+# note that it is inconceivable that this many labels will ever be needed!
 LABELS = \
-  list(string.ascii_letters.upper()) + \
-  ["".join(x) for x in
-   itertools.combinations(list(string.ascii_letters.upper()), 2)]
+  list(string.ascii_uppercase) + ["".join(x) for x in
+   itertools.product(
+    list(string.ascii_uppercase),
+    list(string.ascii_uppercase))]
 labels = \
-  list(string.ascii_letters.lower()) + \
-  ["".join(x) for x in
-   itertools.combinations(list(string.ascii_letters.lower()), 2)]
+  list(string.ascii_lowercase) + ["".join(x) for x in
+   itertools.product(
+    list(string.ascii_lowercase),
+    list(string.ascii_lowercase))]
 
 
 class Topology:
