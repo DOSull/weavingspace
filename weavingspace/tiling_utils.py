@@ -1,5 +1,4 @@
-"""
-MIT License
+"""MIT License.
 
 Copyright (c) 2021-26 David O'Sullivan & Luke Bergmann
 
@@ -24,6 +23,7 @@ SOFTWARE.
 
 from __future__ import annotations
 
+import itertools
 import re
 import string
 from typing import TYPE_CHECKING, NamedTuple
@@ -47,6 +47,11 @@ operations.
 
 PRECISION = 6
 RESOLUTION = 1e-6
+TILE_IDS = [
+  *string.ascii_lowercase,
+  *["".join(x) for x in itertools.product(
+    string.ascii_lowercase, string.ascii_lowercase)]
+]
 
 def _parse_strand_label(s:str) -> list[str]:
   """Break a strand label specification in to a list of labels.
@@ -619,7 +624,7 @@ def get_dual_tile_unit(unit) -> gpd.GeoDataFrame:
 
 
 def _relabel(data:Iterable) -> list:
-  """Return supplied data reassigned with unique values from ascii_letters.
+  """Return supplied data reassigned with unique values from TILE_IDS.
 
   Args:
     data (Iterable): the data to relabel
@@ -632,7 +637,7 @@ def _relabel(data:Iterable) -> list:
   d_count = 0
   for d in data:
     if d not in new_data:
-      new_data[d] = string.ascii_letters[d_count]
+      new_data[d] = TILE_IDS[d_count]
       d_count = d_count + 1
   return [new_data[d] for d in data]
 
