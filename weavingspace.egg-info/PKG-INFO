@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: weavingspace
-Version: 0.0.7.61
+Version: 0.0.7.67
 Summary: A package for making tiled mapping layers
 Author-email: David O'Sullivan <osullivan512@gmail.com>
 License-Expression: MIT
@@ -42,3 +42,12 @@ An overview of the concepts assembled from early proof-of-concept _R_ code is on
 
 ## Other explanatory stuff
 Any of the notebooks in the `examples` folder may be of interest. Some background material and thinking about tiling is in [these notes](https://dosull.github.io/weavingspace/notes/notes-on-tiling.html) and these reflections on the [state of the code](https://dosull.github.io/weavingspace/notes/state-of-the-code.html).
+
+## Experimental QGIS plugin and AI
+There is an experimental QGIS plugin under development. That project is heavily AI-assisted and has resulted in four short sections of code (amounting to about 20 lines of code in 9,000) being 'upstreamed' into `weavingspace`, which is a core component of the plugin. The AI spotted some opportunities for making the code more efficient, and patched these into the plugin version of `weavingspace`. After review, we decided to include them in `weavingspace` proper since they are speed ups with no impact on results. The affected sections of code are all in `tile_map.Tiling` and `tile_map.TileGrid` and in the interest of full disclosure have been 'gated' with comments, like this:
+
+    # ---AI-assisted-code-starts---
+    this.code.modified.based.on.AI.input
+    # ---AI-assisted-code-ends---
+
+If you are interested, you can search on those comments to find the affected sections of code.

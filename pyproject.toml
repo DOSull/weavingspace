@@ -8,7 +8,7 @@ exclude = ["superseded"]
 
 [project]
 name = "weavingspace"
-version = "0.0.7.61"
+version = "0.0.7.67"
 authors = [
   { name="David O'Sullivan", email="osullivan512@gmail.com" },
 ]
