@@ -472,7 +472,7 @@ def get_apothem(shape:geom.Polygon) -> float:
   return min([c.distance(e) for e in get_sides(shape)])
 
 
-def get_angle_bisector(shape:geom.Polygon, v = 0) -> geom.LineString:
+def get_angle_bisector(shape:geom.Polygon, v:int = 0) -> geom.LineString:
   """Return angle bisector of specified corner of supplied polygon.
 
   Args:
@@ -847,7 +847,7 @@ def get_polygon_sector(
     arc2 = shapely.ops.substring(geom.LineString(shape.exterior.coords),
                                  0, e2, normalized = True)
     sector = geom.Polygon(
-      [shape.centroid] + list(arc1.coords) + list(arc2.coords)[1:])
+      [shape.centroid, *list(arc1.coords), *list(arc2.coords)[1:]])
   else:
     arc = shapely.ops.substring(geom.LineString(shape.exterior.coords),
                                 start, end, normalized = True)

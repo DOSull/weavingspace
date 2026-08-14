@@ -1,5 +1,4 @@
-"""
-MIT License
+"""MIT License.
 
 Copyright (c) 2021-26 David O'Sullivan & Luke Bergmann
 
@@ -115,7 +114,7 @@ def _setup_base_tiling(unit:TileUnit) -> str|None:
   return None
 
 
-def _setup_cairo(unit:TileUnit) -> None:
+def _setup_cairo(unit:TileUnit) -> str|None:
   """Set up the Cairo tiling. King of tilings. All hail the Cairo tiling.
 
   The pattern in this function shows how any new setup function should be
@@ -302,7 +301,7 @@ def _setup_stripes(unit:TileUnit) -> str|None:
   xs = [unit.spacing * x for x in np.linspace(-.5, .5, unit.n + 1)]
   stripes = [geom.Polygon([(xmin, ymin), (xmin, ymax), 
                            (xmax, ymax), (xmax, ymin)])
-             for xmin, xmax in zip(xs[:-1], xs[1:])]
+             for xmin, xmax in itertools.pairwise(xs)]
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(string.ascii_letters)[:unit.n]},
     crs = unit.crs,
@@ -963,8 +962,7 @@ def _setup_grid(unit:TileUnit) -> str|None:
   s = sq.bounds[2] - sq.bounds[0]
   h = s * unit.nrows
   w = s * unit.ncols
-  if unit.nrows * unit.ncols < unit.n:
-    unit.n = unit.nrows * unit.ncols
+  unit.n = min(unit.n, unit.nrows * unit.ncols)
   tr = [(-w/2 + s/2 + s*col, h/2 - s/2 - s*row)
         for row in range(unit.nrows)
         for col in range(unit.ncols)]
@@ -1164,7 +1162,7 @@ def _setup_square_dissection(unit:TileUnit) -> str|None:
   return None
 
 
-def _setup_hex_dissection(unit:TileUnit):
+def _setup_hex_dissection(unit:TileUnit) -> str|None:
   """Set up dissection of a hexagon."""
   if any(k not in unit.__dict__ for k in ["n", "offset", "offset_angle"]):
     return ("""Hex dissection tiling requires n, offset, and offset_angle
@@ -1243,9 +1241,9 @@ def _setup_hex_dissection(unit:TileUnit):
           geom.Polygon(outer_pts[11:]  + outer_pts[:2]    + inner_pts[0:3:2])]
       else:
         polys = [
-          geom.Polygon(inner_pts[0:5:2]  + [(0, 0)]),
-          geom.Polygon(inner_pts[4:9:2]  + [(0, 0)]),
-          geom.Polygon(inner_pts[8::2]   + [(0, 0)]),
+          geom.Polygon([*inner_pts[0:5:2], (0, 0)]),
+          geom.Polygon([*inner_pts[4:9:2], (0, 0)]),
+          geom.Polygon([*inner_pts[8::2], (0, 0)]),
           geom.Polygon(outer_pts[0:3:2]  + inner_pts[10::2]),
           geom.Polygon(outer_pts[2:5:2]  + inner_pts[8:11:2]),
           geom.Polygon(outer_pts[4:7:2]  + inner_pts[6:9:2]),
@@ -1423,7 +1421,7 @@ def _get_star(
   return geom.Polygon(list(itertools.chain(*zip(tips, dents, strict = True))))
 
 
-def _setup_star_polygon_2(unit:TileUnit):
+def _setup_star_polygon_2(unit:TileUnit) -> str|None:
   """Set up a star-polygon tiling with no tiling point angle option."""
   if any(k not in unit.__dict__ for k in ["code"]):
     return "Star tiling 2 requires code to be be supplied."
@@ -1684,7 +1682,7 @@ def _setup_chavey(unit:TileUnit) -> str|None:
   return None
 
 
-def _setup_chavey_a(unit:TileUnit) -> str|None:
+def _setup_chavey_a(unit:TileUnit) -> None:
   """Set up 3.3.3.4.4;3.3.4.3.4;4.4.4.4."""
   s = unit.spacing / np.sqrt(5 + 2 * sqrt3)
   t = s * sqrt3 / 2
@@ -1709,7 +1707,7 @@ def _setup_chavey_a(unit:TileUnit) -> str|None:
     geometry = gpd.GeoSeries(polys))
 
 
-def _setup_chavey_b(unit:TileUnit) -> str|None:
+def _setup_chavey_b(unit:TileUnit) -> None:
   """Set up 3.4.4.6;3.4.6.4;4.4.4.4."""
   h = unit.spacing * sqrt3 / (1 + sqrt3) / sqrt2
   s = h / sqrt3
@@ -1733,10 +1731,9 @@ def _setup_chavey_b(unit:TileUnit) -> str|None:
     data = {"tile_id": list(string.ascii_letters)[:len(polys)]},
     crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
-  return None
 
 
-def _setup_chavey_c(unit:TileUnit) -> str|None:
+def _setup_chavey_c(unit:TileUnit) -> None:
   """Set up 3.4.4.6;3.4.6.4."""
   h = unit.spacing * sqrt3 / (3 + sqrt3)
   s = h / sqrt3
@@ -1771,7 +1768,7 @@ def _setup_chavey_c(unit:TileUnit) -> str|None:
     geometry = gpd.GeoSeries(polys))
 
 
-def _setup_chavey_d(unit:TileUnit) -> str|None:
+def _setup_chavey_d(unit:TileUnit) -> None:
   """Set up 3.3.3.4.4;3.3.4.3.4."""
   s = unit.spacing * sqrt2 / (3 + sqrt3)
   t = s * sqrt3 / 2
@@ -1802,7 +1799,7 @@ def _setup_chavey_d(unit:TileUnit) -> str|None:
     geometry = gpd.GeoSeries(polys))
 
 
-def _setup_chavey_e(unit:TileUnit) -> str|None:
+def _setup_chavey_e(unit:TileUnit) -> None:
   """Set up 3.3.3.3.3.3;3.3.4.3.4."""
   s = unit.spacing / (1 + sqrt3)
   t = s * sqrt3 / 2
@@ -1830,7 +1827,7 @@ def _setup_chavey_e(unit:TileUnit) -> str|None:
     geometry = gpd.GeoSeries(polys))
 
 
-def _setup_chavey_f(unit:TileUnit) -> str|None:
+def _setup_chavey_f(unit:TileUnit) -> None:
   """Set up 3.3.3.3.3.3;3.3.3.3.6."""
   h = unit.spacing * sqrt3 / np.sqrt(7)
   s = h / sqrt3
@@ -1853,7 +1850,7 @@ def _setup_chavey_f(unit:TileUnit) -> str|None:
     geometry = gpd.GeoSeries(polys))
 
 
-def _setup_chavey_g(unit:TileUnit) -> str|None:
+def _setup_chavey_g(unit:TileUnit) -> None:
   """Set up 3.3.3.3.3.3;3.3.3.3.6 (another one)."""
   h = unit.spacing / 2
   s = h / sqrt3
@@ -1872,9 +1869,9 @@ def _setup_chavey_g(unit:TileUnit) -> str|None:
     data = {"tile_id": list(string.ascii_letters)[:len(polys)]},
     crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
-  return None
 
-def _setup_chavey_h(unit:TileUnit) -> str|None:
+
+def _setup_chavey_h(unit:TileUnit) -> None:
   """Set up 3.3.4.3.4;3.4.6.4."""
   h = unit.spacing / (1 + 2 / sqrt3)
   s = h / sqrt3
@@ -1900,9 +1897,9 @@ def _setup_chavey_h(unit:TileUnit) -> str|None:
     data = {"tile_id": list(string.ascii_letters)[:len(polys)]},
     crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
-  return None
 
-def _setup_chavey_i(unit:TileUnit) -> str|None:
+
+def _setup_chavey_i(unit:TileUnit) -> None:
   """Set up 3.3.3.3.3.3;3.3.4.3.4."""
   h = unit.spacing / (1 + 2 / sqrt3)
   s = h / sqrt3
@@ -1931,10 +1928,9 @@ def _setup_chavey_i(unit:TileUnit) -> str|None:
     data = {"tile_id": list(string.ascii_letters)[:len(polys)]},
     crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
-  return None
 
 
-def _setup_chavey_j(unit:TileUnit) -> str|None:
+def _setup_chavey_j(unit:TileUnit) -> None:
   h = unit.spacing / (1 + 2 / sqrt3)
   s = h / sqrt3
   t = h / 2
@@ -1954,10 +1950,9 @@ def _setup_chavey_j(unit:TileUnit) -> str|None:
     data = {"tile_id": list(string.ascii_letters)[:len(polys)]},
     crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
-  return None
 
 
-def _setup_chavey_k(unit:TileUnit) -> str|None:
+def _setup_chavey_k(unit:TileUnit) -> None:
   h = unit.spacing / (1 + 2 / sqrt3)
   s = h / sqrt3
   t = h / 2
@@ -1986,4 +1981,3 @@ def _setup_chavey_k(unit:TileUnit) -> str|None:
     data = {"tile_id": list(string.ascii_letters)[:len(polys)]},
     crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
-  return None

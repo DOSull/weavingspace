@@ -1,5 +1,4 @@
-"""
-MIT License
+"""MIT License.
 
 Copyright (c) 2021-26 David O'Sullivan & Luke Bergmann
 
@@ -34,7 +33,6 @@ from time import perf_counter
 import geopandas as gpd
 import matplotlib.colors
 import matplotlib.pyplot as plt
-
 import numpy as np
 import pandas as pd
 import shapely.affinity as affine
@@ -287,14 +285,14 @@ class Tiling:
     self.tileable = tileable
     self.rotation = 0
     self.region = region
-    self.region.sindex # this probably speeds up overlay
+    self.region.sindex # this probably speeds up overlay  # noqa: B018
     self.region_union = self.region.geometry.union_all()
     self.grid = _TileGrid(
       self.tileable,
       self.region.geometry if as_icons else gpd.GeoSeries([self.region_union]),
       as_icons)
     self.tiles, self.prototiles, self.reg_prototiles = self.make_tiling()
-    self.tiles.sindex # again this probably speeds up overlay
+    self.tiles.sindex # again this probably speeds up overlay  # noqa: B018
 
 
   def get_tiled_map(
@@ -446,7 +444,7 @@ class Tiling:
     # if we've retained tiles and want 'clean' edges, then clip
     # note that this step is slow: geopandas unary_unions the clip layer
     if prioritise_tiles and not ragged_edges:
-      tiled_map.sindex
+      tiled_map.sindex  # noqa: B018
       tiled_map = tiled_map.clip(self.region_union)
       if debug:
         print(f"""STEP A7/B3: clip map to region: {perf_counter() - t7:.3f}""")
@@ -742,7 +740,7 @@ class TiledMap:
 
   def render(
       self,
-      **kwargs,
+      **kwargs:dict,
     ) -> Figure:
     """Render the current state to a map.
 
@@ -825,7 +823,7 @@ class TiledMap:
     else:
       fig, axes = plt.subplots(1, 1, figsize = self.figsize,
                                layout = "constrained", **kwargs)
-    
+
     self._plot_map(axes, **kwargs)
     return fig
 
@@ -833,7 +831,7 @@ class TiledMap:
   def _plot_map(
       self,
       ax:plt.Axes,
-      **kwargs,
+      **kwargs:dict,
     ) -> None:
     """Plot map to the supplied axes.
 
@@ -873,7 +871,7 @@ class TiledMap:
       ax:plt.Axes,
       gdf:gpd.GeoDataFrame,
       grouping_var:str = "tile_id",
-      **kwargs,
+      **kwargs:dict,
     ) -> None:
     """Repeatedly plot a gpd.GeoDataFrame based on a subsetting attribute.
 
@@ -929,7 +927,7 @@ class TiledMap:
     gdf.plot(ax = ax, fc = self.buffer_colour)
 
 
-  def plot_legend(self, ax, **kwargs) -> None:
+  def plot_legend(self, ax:plt.Axes, **kwargs:dict) -> None:
     """Plot a legend for this tiled map.
 
     Args:
@@ -967,7 +965,8 @@ class TiledMap:
 
     for cs, tile, rotn in zip(self._colourspecs.values(),
                               legend_tiles.geometry,
-                              legend_tiles.rotation):
+                              legend_tiles.rotation,
+                              strict = True):
       c = tile.centroid
       ax.annotate(cs["column"], xy = (c.x, c.y),
                   ha = "center", va = "center",
@@ -1018,37 +1017,38 @@ class TiledMap:
     unique_ids = []  # list of each tile_id used in order
     vals = []        # the data assigned to the key tiles
     rots = []        # rotation of each key tile
-    # subsets = self.map.groupby("tile_id")
-    for (id, cspec), geom, rot in zip(self._colourspecs.items(),
-                                      tiles.geometry, 
-                                      tiles.rotation):
-      d = list(self.map.loc[self.map.tile_id == id][cspec["column"]])
-      # if the data are categorical then it's complicated...
-      # if cs["categorical"]:
-      #   radial = True and self.radial_key
-      #   # desired order of categorical variable is the
-      #   # color maps dictionary keys
-      #   num_cats = len(cmap)
-      #   val_order = dict(zip(cmap.keys(), range(num_cats)))
-      #   # compile counts of each category
-      #   freqs = [0] * num_cats
-      #   for v in list(d):
-      #     freqs[val_order[v]] += 1
-      #   # make list of the categories containing appropriate
-      #   # counts of each in the order needed using a reverse lookup
-      #   data_vals = list(val_order.keys())
-      #   data_vals = [data_vals[i] for i, f in enumerate(freqs) if f > 0]
-      # else: # any other data is easy!
-      #   data_vals = sorted(d)
-      #   freqs = [1] * len(data_vals)
+    for (ID, cspec), geometry, rot in zip(self._colourspecs.items(),
+                                          tiles.geometry, 
+                                          tiles.rotation,
+                                          strict = True):
+      d = list(self.map.loc[self.map.tile_id == ID][cspec["column"]])
+      """if the data are categorical then it's complicated...
+      if cs["categorical"]:
+        radial = True and self.radial_key
+        # desired order of categorical variable is the
+        # color maps dictionary keys
+        num_cats = len(cmap)
+        val_order = dict(zip(cmap.keys(), range(num_cats)))
+        # compile counts of each category
+        freqs = [0] * num_cats
+        for v in list(d):
+          freqs[val_order[v]] += 1
+        # make list of the categories containing appropriate
+        # counts of each in the order needed using a reverse lookup
+        data_vals = list(val_order.keys())
+        data_vals = [data_vals[i] for i, f in enumerate(freqs) if f > 0]
+      else: # any other data is easy!
+        data_vals = sorted(d)
+        freqs = [1] * len(data_vals)
+      """
       data_vals = sorted(d)
-      key = self.tiling.tileable._get_legend_key_shapes( # type: ignore
-        geom, [1] * len(data_vals), rot, False)
+      key = self.tiling.tileable._get_legend_key_shapes(
+        geometry, [1] * len(data_vals), rot, False)
       key_tiles.extend(key)
       vals.extend(data_vals)
       n = len(data_vals)
-      ids.extend([id] * n)
-      unique_ids.append(id)
+      ids.extend([ID] * n)
+      unique_ids.append(ID)
       rots.extend([rot] * n)
     # finally make up a data table with all the data in all the columns. This
     # allows us to reuse the tiling_utils.plot_subsetted_gdf() function. To be
@@ -1069,9 +1069,8 @@ class TiledMap:
 
 
   def explore(self) -> None:
-    """TODO: add wrapper to make tiled web map via geopandas.explore.
-    """
-    return None
+    """TODO: add wrapper to make tiled web map via geopandas.explore."""
+    return
 
 
   def _set_colourspecs(self) -> None:
@@ -1099,8 +1098,8 @@ class TiledMap:
                 That's fine, but perhaps not what you intended?""")
           self.ids_to_map = [self.ids_to_map]
         else:
-          raise KeyError(
-            """You have requested a single non-existent attribute to map!""")
+          msg = """You have requested a single non-existent attribute to map!"""
+          raise KeyError(msg)
       elif self.ids_to_map is None or not isinstance(self.ids_to_map, Iterable):
         # default to using all of them in order
         print("""No tile ids provided: setting all of them!""")
@@ -1110,8 +1109,9 @@ class TiledMap:
         self.vars_to_map = []
         if len(numeric_columns) == 0:
           # if there are none then we can't do it
-          raise IndexError("""Attempting to set default variables, but
-                          there are no numeric columns in the data!""")
+          msg = """Attempting to set default variables, but
+                there are no numeric columns in the data!"""
+          raise IndexError(msg)  # noqa: TRY301
         if len(numeric_columns) < len(self.ids_to_map):
           # if there are fewer available than we need then repeat some
           print("""Fewer numeric columns in the data than elements in the 
@@ -1126,34 +1126,38 @@ class TiledMap:
           self.vars_to_map = numeric_columns[:len(self.ids_to_map)]
         else:
           self.vars_to_map = numeric_columns
-      # print(f"{self.vars_to_map=}")
 
-      if self.categoricals is None or not isinstance(self.categoricals, Iterable):
+      if self.categoricals is None or not isinstance(
+        self.categoricals, Iterable):
         # provide a set of defaults
-        self.categoricals = [col not in numeric_columns for col in self.vars_to_map]
-      # print(f"{self.categoricals=}")
-      
+        self.categoricals = [col not in numeric_columns
+                             for col in self.vars_to_map]
+
       if isinstance(self.schemes_to_use, str):
         self.schemes_to_use = [self.schemes_to_use] * len(self.ids_to_map)
-      elif self.schemes_to_use is None or not isinstance(self.schemes_to_use, Iterable):
+      elif self.schemes_to_use is None or not isinstance(self.schemes_to_use,
+                                                         Iterable):
         # provide a set of defaults
         self.schemes_to_use = [None] * len(self.ids_to_map)
-      # print(f"{self.schemes_to_use=}")
-      
+
       if isinstance(self.colors_to_use, str):
         self.colors_to_use = [self.colors_to_use] * len(self.ids_to_map)
-      elif self.colors_to_use is None or not isinstance(self.colors_to_use, Iterable):
+      elif self.colors_to_use is None or not isinstance(self.colors_to_use,
+                                                        Iterable):
         # provide starter defaults
-        print(f"""No colour maps provided! Setting some defaults.""")
-        self.colors_to_use = ["Set1" if cat else "Reds" for cat in self.categoricals]
-      for i, (col, cat) in enumerate(zip(self.colors_to_use, self.categoricals)):
+        print("""No colour maps provided! Setting some defaults.""")
+        self.colors_to_use = ["Set1" if cat else "Reds"
+                              for cat in self.categoricals]
+      for i, (col, cat) in enumerate(zip(self.colors_to_use,  # noqa: B905
+                                         self.categoricals)):
         if cat and col not in CMAPS_CATEGORICAL:
           self.colors_to_use[i] = CMAPS_CATEGORICAL[i]
         # we'll allow diverging schemes for now...
-        elif not cat and col not in CMAPS_SEQUENTIAL and col not in CMAPS_DIVERGING:
+        elif (not cat and 
+              col not in CMAPS_SEQUENTIAL and 
+              col not in CMAPS_DIVERGING):
           self.colors_to_use[i] = CMAPS_SEQUENTIAL[i]
-      # print(f"{self.colors_to_use=}")
-
+ 
       if isinstance(self.n_classes, int):
         if self.n_classes == 0:
           self.n_classes = [None] * len(self.ids_to_map)
@@ -1161,8 +1165,7 @@ class TiledMap:
           self.n_classes = [self.n_classes] * len(self.ids_to_map)
       elif self.n_classes is None or not isinstance(self.n_classes, Iterable):
         # provide a set of defaults
-        self.n_classes = [None if cat else None for cat in self.categoricals] 
-      # print(f"{self.n_classes=}")
+        self.n_classes = [None if cat else None for cat in self.categoricals]
 
       if not isinstance(self.vmins, Iterable):
         self.vmins = [None] * len(self.ids_to_map)

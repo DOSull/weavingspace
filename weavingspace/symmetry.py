@@ -1,5 +1,4 @@
-"""
-MIT License
+"""MIT License.
 
 Copyright (c) 2021-26 David O'Sullivan & Luke Bergmann
 
@@ -481,7 +480,7 @@ class Symmetries:
 
   def get_rotations(
       self,
-      offsets:None|list[int] = None,
+      offsets:list[int]|None = None,
     ) -> list[Transform]:
     """Get the rotations associated with this collection of symmetries.
 
@@ -505,7 +504,7 @@ class Symmetries:
 
   def get_reflections(
       self,
-      offsets:None|list[int] = None,
+      offsets:list[int]|None = None,
     ) -> list[Transform]:
     """Get the reflections associated with this collection of symmetries.
 

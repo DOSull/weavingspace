@@ -1,5 +1,4 @@
-"""
-MIT License
+"""MIT License.
 
 Copyright (c) 2021-26 David O'Sullivan & Luke Bergmann
 
@@ -25,7 +24,6 @@ SOFTWARE.
 from __future__ import annotations
 
 import itertools
-import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -34,7 +32,6 @@ import numpy as np
 import pandas as pd
 import shapely.affinity as affine
 import shapely.geometry as geom
-import shapely.ops
 
 from weavingspace import (
   Loom,
@@ -311,7 +308,7 @@ class WeaveUnit(Tileable):
     return weave.set_crs(self.crs)
 
 
-  def _get_axis_from_label(self, label:str = "a", strands:str = None):
+  def _get_axis_from_label(self, label:str = "a", strands:str = None) -> int:
     """Determine the axis of a tile_id from the strands spec string.
 
     Args:
@@ -347,9 +344,9 @@ class WeaveUnit(Tileable):
     tile_ids = pd.Series.unique(self.tiles.tile_id)
     groups = self.tiles.groupby("tile_id")
     tiles, rotations = [], []
-    for id in tile_ids:
-      candidates = groups.get_group(id)
-      axis = self._get_axis_from_label(id, self.strands)
+    for ID in tile_ids:
+      candidates = groups.get_group(ID)
+      axis = self._get_axis_from_label(ID, self.strands)
       tiles.append(
         self._get_most_central_large_tile(candidates, tiles))
       rotations.append(-angles[axis] + self.rotation)
@@ -365,6 +362,7 @@ class WeaveUnit(Tileable):
 
     Args:
       tiles (gpd.GeoDataFrame): the set of tiles to choose from.
+      other_tiles (list[geom.Polygon]): additional tiles framing choice.
 
     Returns:
       geom.Polygon: the chosen, large central tile.
@@ -376,13 +374,13 @@ class WeaveUnit(Tileable):
       geoms = list(tiles.geometry)
     else:
       mean_log_a = np.mean(np.log(areas))
-      geoms = [g for g, a in zip(tiles.geometry, areas)
+      geoms = [g for g, a in zip(tiles.geometry, areas, strict = True)
               if np.log(a) > mean_log_a]
     if len(other_tiles) == 0 or self.weave_type in ("cube", "hex"):
       d = [g.centroid.distance(geom.Point(0, 0)) for g in geoms]
     else:
       c = geom.MultiPolygon(other_tiles).centroid
-      d = [geom.MultiPolygon([g] + other_tiles).centroid.distance(c)
+      d = [geom.MultiPolygon([g, *other_tiles]).centroid.distance(c)
           for g in geoms]
     return geoms[d.index(min(d))]
 
@@ -424,11 +422,11 @@ class WeaveUnit(Tileable):
     bottom = bottom - margin
     top = bottom + height + 2 * margin
     slices = []
-    for l, r in zip(cuts[:-1], cuts[1:], strict = True):
+    for L, R in zip(cuts[:-1], cuts[1:], strict = True):
       # we add a margin to left and right so that they overplot; otherwise in
       # rendering matplotlib leaves small gaps which give a washed out look
       # to the fill colour!
-      slice = geom.Polygon([(l - margin, bottom), (r + margin, bottom),
-                            (r + margin,    top), (l - margin,    top)])
-      slices.append(slice.intersection(g))
+      this_slice = geom.Polygon([(L - margin, bottom), (R + margin, bottom),
+                                 (R + margin,    top), (L - margin,    top)])
+      slices.append(this_slice.intersection(g))
     return [affine.rotate(s, angle, origin = c) for s in slices]

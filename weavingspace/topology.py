@@ -1,5 +1,4 @@
-"""
-MIT License
+"""MIT License.
 
 Copyright (c) 2021-26 David O'Sullivan & Luke Bergmann
 
@@ -1698,7 +1697,7 @@ class Tile:
         the new Edges arising from insertion of this Vertex.
 
     """
-    self.corners = self.corners[:i] + [v] + self.corners[i:]
+    self.corners = [*self.corners[:i], v, *self.corners[i:]]
     old_edge = self.edges[i - 1]
     # store current ID of the affected edge for return to calling context
     old_edge_ID = old_edge.ID
@@ -1741,7 +1740,7 @@ class Tile:
       self,
       v:Vertex,
       new_edge:Edge = None,
-    ) -> None|tuple[tuple[tuple[int,int], tuple[int,int]], Edge]:
+    ) -> tuple[tuple[tuple[int, int], tuple[int, int]], Edge]|None:
     """Update edges and edges_CW attributes based on insertion of Vertex.
 
     If new_edge is supplied then the neighbour tile at v has already created
@@ -1775,10 +1774,10 @@ class Tile:
     if abs(i - j) != 1:
       # edge indices 'wrap' around from end of edge list to start so drop
       # first and last current edges and stick new one on at the end
-      self.edges = self.edges[1:-1] + [new_edge]
+      self.edges = [*self.edges[1:-1], new_edge]
     else:
       # insert new edge into list in place of the two old ones
-      self.edges = self.edges[:i] + [new_edge] + self.edges[j+1:]
+      self.edges = [*self.edges[:i], new_edge, *self.edges[j + 1:]]
     # update the edge directions
     self.set_edge_directions()
     if return_edge_updates:
@@ -2133,12 +2132,12 @@ class Edge:
     the returned edges would be (0 1 v) and (v 2 5).
     """
     i = self.corners.index(predecessor)
-    new_edge = Edge([v] + self.corners[(i+1):])
+    new_edge = Edge([v, *self.corners[i + 1:]])
     if self.right_tile is not None:
       new_edge.right_tile = self.right_tile
     if self.left_tile is not None:
       new_edge.left_tile = self.left_tile
-    self.corners = self.corners[:(i+1)] + [v]
+    self.corners = [*self.corners[:i + 1], v]
     self.vertices = [self.vertices[0], v]
     self.ID = tuple(v.ID for v in self.vertices)
     return [self, new_edge]
