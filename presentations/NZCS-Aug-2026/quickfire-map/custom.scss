@@ -1,5 +1,7 @@
 /*-- scss:defaults --*/
 
+$link-color: firebrick;
+
 /*-- scss:rules --*/
 
 .reveal .slide-logo {
@@ -15,8 +17,4 @@
 .reveal h6,
 .reveal p {
   text-transform: none;
-}
-
-.reveal.a {
-  color: firebrick;
 }
