@@ -75,9 +75,9 @@ fig = (tiling.get_tiled_map(prioritise_tiles = True)
           legend = False, figsize = (10, 7)))
 ```
 
-&nbsp;
+![](images/weavingspace-qr.png){height="250" fig-align="left"}
 
-::: aside
+::: {style="font-size:24px;background-color:#dddddd;position:relative;bottom:50px;"}
 Maps on the next slides are of the IMD. See: Exeter DJ, Zhao J, Crengle S, Lee A, Browne M, 2017, [The New Zealand Indices of Multiple Deprivation (IMD): A new suite of indicators for social and health research in Aotearoa, New Zealand](https://dx.plos.org/10.1371/journal.pone.0181260) _PLOS ONE_ **12**(8) e0181260
 :::
 
@@ -88,12 +88,13 @@ Maps on the next slides are of the IMD. See: Exeter DJ, Zhao J, Crengle S, Lee A
 
 # MapWeaver web app
 
-![](images/mapweaver-qr.png){fig-align="center"}
+![](images/mapweaver-qr.png){fig-align="center"} 
 
 ## Maps without code! {data-background="images/mapweaver-app.png" background-opacity=0.75 style="text-shadow: 0px 0px 5px #fff;"}
 
 ### [geospatialstuff.com/mapweaver/app](https://geospatialstuff.com/mapweaver/app){style="background:rgba(255,255,255,0.5);"}
 
+![](images/mapweaver-qr.png){height="250" style="position:relative;top:20vh;left:0vw;"}
 
 # `weavingspace_qgis` plugin
 
@@ -102,6 +103,8 @@ Maps on the next slides are of the IMD. See: Exeter DJ, Zhao J, Crengle S, Lee A
 ## Better maps without code! {.smaller data-background="images/weavingspace-plugin-2.png" data-background-size="contain" background-opacity=0.75 style="text-shadow: 0px 0px 5px #fff;"}
 
 ### [github.com/FoldingSpace/weavingspaceQGIS/](https://github.com/FoldingSpace/weavingspaceQGIS){style="background:rgba(255,255,255,0.5);"}
+
+![](images/weavingspaceQGIS-qr.png){height="250" style="position:relative;top:20vh;left:0vw;"}
 
 ## Live demo time! {data-background="images/Wile-E-Coyote-1.jpg.webp"}
 
