@@ -8,7 +8,7 @@ exclude = ["superseded"]
 
 [project]
 name = "weavingspace"
-version = "0.0.7.67"
+version = "0.0.7.89"
 authors = [
   { name="David O'Sullivan", email="osullivan512@gmail.com" },
 ]
@@ -21,13 +21,15 @@ classifiers = [
 ]
 license = "MIT"
 dependencies = [
-    "dataclasses",
-    "matplotlib",
-    "fiona",
-    "geopandas",
-    "mapclassify",
-    "networkx",
-    "typing",
+    "dataclasses==0.8",
+    "typing==3.10.0.0",
+    "matplotlib==3.8.4",
+    "pandas==2.2.3",
+    "shapely==2.0.6",
+    "fiona==1.9.5",
+    "geopandas==1.0.1",
+    "mapclassify==2.10.0",
+    "networkx==3.5",
 ]
 
 [project.urls]
