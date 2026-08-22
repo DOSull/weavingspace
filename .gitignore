@@ -24,3 +24,4 @@ election-counties*
 *.Rproj
 weaving-space.code-workspace
 uv.lock
+datasets/
