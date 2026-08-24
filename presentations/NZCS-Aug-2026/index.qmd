@@ -114,7 +114,7 @@ Maps on the next slides are of the IMD. See: Exeter DJ, Zhao J, Crengle S, Lee A
 
 [github.com/DOSull/mapweaver](https://github.com/DOSull/mapweaver)
 
-[github.com/FoldingSpace/weavingspaceQGIS/](https://github.com/FoldingSpace/weavingspaceQGIS)
+[github.com/FoldingSpace/weavingspaceQGIS](https://github.com/FoldingSpace/weavingspaceQGIS)
 
 And for more about my work in general: 
 
