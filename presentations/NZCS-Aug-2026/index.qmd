@@ -112,7 +112,7 @@ Maps on the next slides are of the IMD. See: Exeter DJ, Zhao J, Crengle S, Lee A
 ### Questions? {style="font-size:144px;"}
 [github.com/DOSull/weavingspace](https://github.com/DOSull/weavingspace)
 
-[geospatialstuff.com/mapweaver/app/](https://geospatialstuff.com/mapweaver/app/)
+[github.com/DOSull/mapweaver](https://github.com/DOSull/mapweaver)
 
 [github.com/FoldingSpace/weavingspaceQGIS/](https://github.com/FoldingSpace/weavingspaceQGIS)
 
