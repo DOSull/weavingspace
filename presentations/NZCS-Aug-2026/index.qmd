@@ -75,7 +75,15 @@ fig = (tiling.get_tiled_map(prioritise_tiles = True)
           legend = False, figsize = (10, 7)))
 ```
 
+::: {.columns}
+::: {.column width="70%"}
+&nbsp;
+<p style="text-indent:-2em;padding-left:2em;font-size:80%;">O’Sullivan D & L Bergmann. Forthcoming. Tiled and woven patterns for multivariate mapping. _Annals of the American Association of Geographers_.</p>
+:::
+::: {.column width="30%"}
 ![](images/weavingspace-qr.png){height="250" fig-align="left"}
+:::
+:::
 
 ::: {style="font-size:24px;background-color:#dddddd;position:relative;bottom:50px;"}
 Maps on the next slides are of the IMD. See: Exeter DJ, Zhao J, Crengle S, Lee A, Browne M, 2017, [The New Zealand Indices of Multiple Deprivation (IMD): A new suite of indicators for social and health research in Aotearoa, New Zealand](https://dx.plos.org/10.1371/journal.pone.0181260) _PLOS ONE_ **12**(8) e0181260
@@ -94,7 +102,12 @@ Maps on the next slides are of the IMD. See: Exeter DJ, Zhao J, Crengle S, Lee A
 
 ### [geospatialstuff.com/mapweaver/app](https://geospatialstuff.com/mapweaver/app){style="background:rgba(255,255,255,0.5);"}
 
-![](images/mapweaver-qr.png){height="250" style="position:relative;top:20vh;left:0vw;"}
+&nbsp;
+
+<p style="text-indent:-2em;padding-left:2em;;font-size:80%;">O’Sullivan D & L Bergmann. 2026. Using _MapWeaver_ to make tiled and woven maps of multivariate thematic data. _Cartographic Perspectives_ **108**. doi: [10.14714/CP108.2109](https://dx.doi.org/10.14714/CP108.2109).</p>
+
+
+![](images/mapweaver-qr.png){height="250"}
 
 # `weavingspace_qgis` plugin
 
