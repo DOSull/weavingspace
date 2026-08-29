@@ -975,7 +975,10 @@ def _setup_grid(unit:TileUnit) -> str|None:
         for row in range(unit.nrows)
         for col in range(unit.ncols)]
   squares = [affine.translate(sq, v[0], v[1]) for v in tr]
-  unit.setup_vectors((0, h), (w, 0))
+  if "xy_offset" in unit.__dict__:
+    unit.setup_vectors((unit.xy_offset[0] * s, h), (w, unit.xy_offset[1] * s))
+  else:
+    unit.setup_vectors((0, h), (w, 0))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": sorted(list(TILE_IDS)[:unit.n])},
     crs = unit.crs,
