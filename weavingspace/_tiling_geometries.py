@@ -1016,10 +1016,6 @@ def _setup_square_colouring(unit:TileUnit) -> str|None:
                  _get_square_colouring_squares([(0,1),
                                                 (0,0), (1,0)], s)]
       _setup_vectors(unit, s, (1,1), (-1,2), (2,-1))
-    case 4:
-      unit.nrows, unit.ncols = 2, 2
-      _setup_grid(unit)
-      return None
     case 5:
       squares = _get_square_colouring_squares([       (1,2),
                                                (0,1), (1,1), (2,1),
@@ -1040,16 +1036,8 @@ def _setup_square_colouring(unit:TileUnit) -> str|None:
                                                (0,1), (1,1), (2,1),
                                                (0,0), (1,0)], s)
       _setup_vectors(unit, s, (1,3), (3,1), (2,-2))
-    case 9:
-      unit.nrows, unit.ncols = 3, 3
-      _setup_grid(unit)
-      return None
-    case 16:
-      unit.nrows, unit.ncols = 4, 4
-      _setup_grid(unit)
-      return None
-    case 25:
-      unit.nrows, unit.ncols = 5, 5
+    case 4 | 9 | 16 | 25: # delegate to grid constructor
+      unit.nrows, unit.ncols = int(np.sqrt(unit.n)), int(np.sqrt(unit.n))
       _setup_grid(unit)
       return None
     case _:
