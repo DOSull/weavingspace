@@ -1011,9 +1011,10 @@ def _setup_square_colouring(unit:TileUnit) -> str|None:
     case 2:
       squares = _get_square_colouring_squares([(0,0), (1,0)], s)
       _setup_vectors(unit, s, (2,0), (0,1))
-    case 3:
-      squares = _get_square_colouring_squares([(0,1),
-                                               (0,0), (1,0)], s)
+    case 3: # translation of squares for backward compatibility at present
+      squares = [affine.translate(sq, -s/6, -s/6) for sq in
+                 _get_square_colouring_squares([(0,1),
+                                                (0,0), (1,0)], s)]
       _setup_vectors(unit, s, (1,1), (-1,2), (2,-1))
     case 4:
       squares = _get_square_colouring_squares([(0,1), (1,1),
