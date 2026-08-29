@@ -1017,9 +1017,9 @@ def _setup_square_colouring(unit:TileUnit) -> str|None:
                                                 (0,0), (1,0)], s)]
       _setup_vectors(unit, s, (1,1), (-1,2), (2,-1))
     case 4:
-      squares = _get_square_colouring_squares([(0,1), (1,1),
-                                               (0,0), (1,0)], s)
-      _setup_vectors(unit, s, (0,2), (2,0))
+      unit.nrows, unit.ncols = 2, 2
+      _setup_grid(unit)
+      return None
     case 5:
       squares = _get_square_colouring_squares([       (1,2),
                                                (0,1), (1,1), (2,1),
@@ -1041,23 +1041,17 @@ def _setup_square_colouring(unit:TileUnit) -> str|None:
                                                (0,0), (1,0)], s)
       _setup_vectors(unit, s, (1,3), (3,1), (2,-2))
     case 9:
-      squares = [ # rotation is for backward compatibility at present
-        affine.rotate(s, -90, origin = (0, 0)) for s in
-        _get_square_colouring_squares(
-          list(itertools.product(range(3), range(3))), s)]
-      _setup_vectors(unit, s, (0,3), (3,0))
+      unit.nrows, unit.ncols = 3, 3
+      _setup_grid(unit)
+      return None
     case 16:
-      squares = [
-        affine.rotate(s, -90, origin = (0, 0)) for s in
-        _get_square_colouring_squares(
-          list(itertools.product(range(4), range(4))), s)]
-      _setup_vectors(unit, s, (0,4), (4,0))
+      unit.nrows, unit.ncols = 4, 4
+      _setup_grid(unit)
+      return None
     case 25:
-      squares = [
-        affine.rotate(s, -90, origin = (0, 0)) for s in
-        _get_square_colouring_squares(
-          list(itertools.product(range(5), range(5))), s)]
-      _setup_vectors(unit, s, (0,5), (5,0))
+      unit.nrows, unit.ncols = 5, 5
+      _setup_grid(unit)
+      return None
     case _:
       return (f"""{unit.n}-colouring of squares is not supported.
               Try a number between 2 and 9, 16, or 25.""")
