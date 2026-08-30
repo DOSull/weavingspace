@@ -36,7 +36,6 @@ import networkx as nx
 import numpy as np
 import shapely.affinity as affine
 import shapely.geometry as geom
-from scipy import interpolate
 
 from weavingspace import (
   ShapeMatcher,
@@ -1345,7 +1344,7 @@ class Topology:
     ) -> None:
     """Apply zigzag transformation to supplied Edge.
 
-    Currently this will only work correctly if h is even.
+    Currently this will only work correctly if n is even.
 
     TODO: make it possible for odd numbers of 'peaks' to work (this may require
     allowing bidirectional Edges, i.e. storing Edges in both directions so that
@@ -1404,16 +1403,10 @@ class Topology:
 
     """
     r = p0.distance(p1)
-    # make a sinusoidal template
-    x = np.linspace(0, n * np.pi, n * 2 + 1, endpoint = True)
-    y = [np.sin(x) for x in x]
-    spline = interpolate.InterpolatedUnivariateSpline(x, y, k = 2)
+    xs = np.linspace(0, n * np.pi, (n + smoothness) * 2 + 1, endpoint = True)
+    ys = [np.sin(x) for x in xs]
 
-    spline_steps = (n + smoothness) * 2 + 1
-    xs = np.linspace(0, n * np.pi, spline_steps, endpoint = True)
-    ys = spline(xs)
-
-    sfx = 1 / max(x) * r
+    sfx = 1 / max(xs) * r
     sfy = h * r / 2
     theta = np.arctan2(p1.y - p0.y, p1.x - p0.x)
 
