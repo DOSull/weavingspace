@@ -101,34 +101,34 @@ class Topology:
 
   tileable: Tileable = None
   """the Tileable on which the topology will be based."""
-  tiles: list[Tile] = []
+  tiles: list[Tile]
   """list of the Tiles in the topology. We use polygons returned by the
   tileable.get_local_patch method for these. That is the base tiles and 8
   adjacent copies (for a rectangular tiling), or 6 adjacent copies (for a
   hexagonal tiling)."""
-  points: dict[int, Vertex] = {}
+  points: dict[int, Vertex]
   """dictionary of all points (vertices and corners) in the tiling, keyed by
   Vertex ID."""
-  edges: dict[tuple[int,int], Edge] = {}
+  edges: dict[tuple[int,int], Edge]
   """dictionary of the tiling edges, keyed by Edge ID."""
-  dual_tiles: dict[int, geom.Polygon] = {}
+  dual_tiles: dict[int, geom.Polygon]
   """list of geom.Polygons from which a dual tiling might be constructed."""
-  n_tiles: int = 0
+  n_tiles: int
   """number of tiles in the base Tileable (retained for convenience)."""
-  shape_groups: list[list[int]] = []
+  shape_groups: list[list[int]]
   """list of lists of tile IDs distinguished by shape and optionally tile_id"""
-  tile_matching_transforms: list[tuple[float]] = []
+  tile_matching_transforms: list[tuple[float]]
   """shapely transform tuples that map tiles onto other tiles"""
-  tile_transitivity_classes: list[tuple[int]] = []
+  tile_transitivity_classes: list[tuple[int]]
   """list of lists of tile IDs in each transitivity class"""
-  vertex_transitivity_classes: list[list[int]] = []
+  vertex_transitivity_classes: list[list[int]]
   """list of lists of vertex IDs in each transitivity class"""
-  edge_transitivity_classes: list[list[tuple[int]]] = []
+  edge_transitivity_classes: list[list[tuple[int]]]
   """list of lists of edge IDs in each transitivity class"""
 
   def __init__(
       self,
-      unit: None|Tileable,
+      unit: Tileable|None,
       ignore_tile_ids:bool = True,
     ) -> None:
     """Class constructor.
@@ -139,8 +139,9 @@ class Topology:
         shapes, not labels. If False consider any labels. Defaults to True.
 
     """
-    # Note that the order of these setup steps is fragile sometimes
-    # not obviously so.
+    # Note that the order of these setup steps is critical sometimes not
+    # obviously so. NULL initialisation with unit = None accommodates cloning a
+    # new Topology, and (potentially) simplifies notebook-based debugging.
     if unit is not None:
       self.tileable = unit # keep this for reference
       self.n_tiles = self.tileable.tiles.shape[0]
@@ -193,14 +194,15 @@ class Topology:
       corners = tiling_utils.get_corners(shape, repeat_first = False)
       for c in corners:
         prev_vertex = None
-        for p in reversed(self.points.values()):
+        for p in self.points.values():
           if c.distance(p.point) <= 2 * tiling_utils.RESOLUTION:
-            # found an already existing vertex, so add to the tile and break
+            # an already existing vertex, so add to tile and break
+            tile.corners.append(p.ID)
+            # set flag so we know that we're done with this one
             prev_vertex = p
-            tile.corners.append(prev_vertex.ID)
             break
         if prev_vertex is None:
-          # new vertex, add it to the topology dictionary and to the tile
+          # new vertex, add it to topology dictionary and to tile
           v = self.add_vertex(c)
           tile.corners.append(v.ID)
           if debug:
@@ -223,18 +225,16 @@ class Topology:
       if debug:
         print(f"Checking for vertices incident on Tile {tile.ID}")
       corners = []
-      # performance is much improved using the vertex IDs
-      initial_corner_IDs = tile.get_corner_IDs()
-      # we need the current shape (not yet set) to check for incident vertices
+      # performance much improved using vertex IDs to match, not Vertex objects
+      # we need current shape (not yet set) to check for incident vertices
       shape = geom.Polygon([c.point for c in tile.get_corners()])
-      # get points incident on tile boundary, not already in the tile corners
+      # get points incident on tile boundary, not already in tile corners
       new_points = [v for v in self.points.values()
-                    if v.ID not in initial_corner_IDs and
+                    if v.ID not in tile.corners and
                     v.point.distance(shape) <= 2 * tiling_utils.RESOLUTION]
-      # iterate over sides of the tile to see which the vertex is incident on
-      for c1, c2 in zip(tile.corners, tile.corners[1:] + tile.corners[:1],
-                        strict = True):
-        all_points = [c1, c2]
+      # iterate over sides of tile to see which side vertex is incident on
+      for c1, c2 in tile.get_corner_pairs():
+        to_insert = []
         if len(new_points) > 0:
           if debug:
             print(f"{[v.ID for v in new_points]} incident on tile")
@@ -242,15 +242,15 @@ class Topology:
           to_insert = [v for v in new_points
                        if v.point.distance(ls) <= 2 * tiling_utils.RESOLUTION]
           if len(to_insert) > 0:
-            # sort by distance along the side
+            # sort by distance along side
             d_along = sorted([(ls.line_locate_point(v.point), v)
                               for v in to_insert], key = lambda x: x[0])
-            to_insert = [v for d, v in d_along]
-            all_points = all_points[:1] + [v.ID for v in to_insert] + all_points[1:]
+            to_insert = [v.ID for d, v in d_along]
+        all_points = [c1, *to_insert, c2]
         corners.extend(all_points[:-1])
-        for x1, x2 in zip(all_points[:-1], all_points[1:], strict = True):
-          # x2 will add the tile and neigbour when we get to the next side
-          # every vertex gets a turn!
+        for (x1, x2) in itertools.pairwise(all_points):
+          # x2 will add tile and neigbour when we get to next side, so no need
+          # to do it here: every vertex gets its turn!
           self.points[x1].add_tile(tile.ID)
           self.points[x1].add_neighbour(x2)
       tile.corners = corners
@@ -289,11 +289,11 @@ class Topology:
         print(f"Adding edges from Tile {tile.ID}")
       tile.edges = []
       vertices = [v for v in tile.get_corners() if v.is_tiling_vertex]
-      # note that through here finding ints in lists is much faster than
-      # finding Vertex objects, hence we use lists of IDs not Vertex objects
+      # finding ints in lists is much faster than finding Vertex objects
+      # hence we use lists of IDs not Vertex objects
       if len(vertices) > 1:
         for v1, v2 in zip(vertices, vertices[1:] + vertices[:1], strict = True):
-          corner_IDs = tile.get_corner_IDs()
+          corner_IDs = tile.corners
           idx1 = corner_IDs.index(v1.ID)
           idx2 = corner_IDs.index(v2.ID)
           if idx1 < idx2:
@@ -305,7 +305,7 @@ class Topology:
             # check that reverse direction edge is not present first
             r_ID = ID[::-1]
             if r_ID in self.edges:
-              # if it is, then add it and set left_tile
+              # if it is, then set left_tile and add to tile edges
               if debug:
                 print(f"reverse edge {r_ID} found")
               e = self.edges[r_ID]
@@ -315,7 +315,7 @@ class Topology:
               # we've found a new edge so make and add it
               if debug:
                 print(f"adding new edge {corners}")
-              e = self.add_edge([self.points[c] for c in corners])
+              e = self.add_edge(corners)
               e.right_tile = tile.ID
               tile.edges.append(e.ID)
       # initialise the edge direction information in the tile
@@ -337,7 +337,7 @@ class Topology:
     """Assign base_ID attribute of vertices."""
     # assign vertex base_ID frome the core tiles
     for tile0 in self.tiles[:self.n_tiles]:
-      for v in tile0.get_corner_IDs():
+      for v in tile0.corners:
         self.points[v].base_ID = v
     # assign others from their corresponding vertex in the core
     for t0 in self.tiles[:self.n_tiles]:
@@ -373,7 +373,7 @@ class Topology:
     # the number of tiles in the base + radius-1
     n_r1 = len(self.tiles)
     # first add any missing vertices to the non-base tiles
-    # we add all the missing vertices before doing any merges
+    # add all missing vertices before doing any merges
     for base in self.tiles[:self.n_tiles]:
       for other in self.tiles[base.ID:n_r1:self.n_tiles]:
         self._match_reference_tile_vertices(base, other)
@@ -398,8 +398,7 @@ class Topology:
       tile2 (Tile): tile to change.
 
     """
-    to_add = len(tile1.corners) - len(tile2.corners)
-    while to_add > 0:
+    while len(tile1.corners) > len(tile2.corners):
       # find the reference x-y offset
       dxy = (tile2.centre.x - tile1.centre.x, tile2.centre.y - tile1.centre.y)
       for i, t1c in enumerate([c.point for c in tile1.get_corners()]):
@@ -412,9 +411,9 @@ class Topology:
           v.is_tiling_vertex = True
           old_edge, new_edges = tile2.insert_vertex_at(v, i)
           del self.edges[old_edge]
-          for e in new_edges:
+          for new_edge in new_edges:
+            e = self.add_edge(new_edge)
             self.edges[e.ID] = e
-          to_add = to_add - 1
 
 
   def _match_reference_tile_corners(
@@ -438,10 +437,11 @@ class Topology:
       for v in vs_to_change:
         v.is_tiling_vertex = False
         # it's a corner not an edge so will have no more than 2 v.tiles
-        old_edges, new_edge = v.tiles[0].merge_edges_at_vertex(v)
+        old_edges, new_edge = self.tiles[v.tiles[0]].merge_edges_at_vertex(v.ID)
         for e in old_edges:
           del self.edges[e]
         self.edges[new_edge.ID] = new_edge
+
 
   def _identify_distinct_tile_shapes(
       self,
@@ -494,6 +494,7 @@ class Topology:
       for i, group in enumerate(self.shape_groups):
         for j in group:
           self.tiles[j].shape_group = i
+
 
   def _find_tile_transitivity_classes(
       self,
@@ -832,7 +833,7 @@ class Topology:
     """
     vs = set()
     for tile in tiles:
-      vs = vs.union(tile.get_corner_IDs())
+      vs = vs.union(tile.corners)
     return [self.points[v] for v in vs]
 
 
@@ -909,7 +910,7 @@ class Topology:
     return v
 
 
-  def add_edge(self, vs:list[Vertex]) -> Edge:
+  def add_edge(self, vs:list[int]) -> Edge:
     """Create an Edge from the suppled vertices and return it.
 
     The new Edge is added to the edges dictionary. Edges are self indexing by
@@ -1363,7 +1364,7 @@ class Topology:
     ls = self.zigzag_between_points(v0.point, v1.point, n, h, smoothness)
     # remove current corners
     self.points = {k: v for k, v in self.points.items()
-                   if k not in edge.get_corner_IDs()[1:-1]}
+                   if k not in edge.corners[1:-1]}
     # add the new ones
     new_corners = [self.add_vertex(geom.Point(xy)).ID for xy in ls.coords]
     edge.corners = edge.vertices[:1] + new_corners + edge.vertices[-1:]
@@ -1569,7 +1570,7 @@ class Tile:
         edge IDs.
 
     """
-    return (f"Tile {self.ID} Corners: {self.get_corner_IDs()} "
+    return (f"Tile {self.ID} Corners: {self.corners} "
             f"Edges: {self.get_edge_IDs()}")
 
 
@@ -1577,20 +1578,15 @@ class Tile:
     return str(self)
 
 
-  def get_corner_IDs(self) -> list[int]:
-    """Return list of corner IDs (not Vertex objects).
-
-    Returns:
-      list[int]: list of integer IDs of tile corners.
-
-    """
-    return self.corners
-
-
   def get_corners(self) -> list[Vertex]:
     return [self.topology.points[v] for v in self.corners]
 
 
+  def get_corner_pairs(self) -> list[tuple[int,int]]:
+    return zip(self.corners, [*self.corners[1:], *self.corners[:1]],
+                        strict = True)
+
+  
   def get_edge_IDs(self) -> list[tuple[int,int]]:
     """Return list of edge IDs (not Edge objects).
 
@@ -1632,9 +1628,9 @@ class Tile:
     self.corners = []
     for e, cw in zip(self.get_edges(), self.edges_CW, strict = True):
       if cw: # clockwise to extend by all but the first corner
-        self.corners.extend(e.get_corner_IDs()[:-1])
+        self.corners.extend(e.corners[:-1])
       else: # counter-clockwise so extend in reverse
-        self.corners.extend(e.get_corner_IDs()[1:][::-1])
+        self.corners.extend(e.corners[1:][::-1])
     if update_shape:
       self.set_shape_from_corners()
 
@@ -1659,7 +1655,7 @@ class Tile:
 
   def insert_vertex_at(
       self,
-      vx:Vertex,
+      v:Vertex,
       i:int,
       update_shape:bool = False,
     ) -> tuple[tuple[int,int],tuple[tuple[int,int],...]]:
@@ -1687,13 +1683,12 @@ class Tile:
         the new Edges arising from insertion of this Vertex.
 
     """
-    v = vx.ID
-    self.corners = [*self.corners[:i], v, *self.corners[i:]]
+    self.corners = [*self.corners[:i], v.ID, *self.corners[i:]]
     old_edge = self.get_edges()[i - 1]
     # store current ID of the affected edge for return to calling context
     old_edge_ID = old_edge.ID
-    new_edges = [e.ID for e in old_edge.insert_vertex(v, self.corners[i - 1])]
-    self.edges = self.edges[:(i-1)] + new_edges + self.edges[i:]
+    new_edges = [e.ID for e in old_edge.insert_vertex(v.ID, self.corners[i - 1])]
+    self.edges = [*self.edges[:(i-1)], *new_edges, *self.edges[i:]]
     self.set_edge_directions()
     if update_shape:
       self.set_shape_from_corners()
@@ -1702,7 +1697,7 @@ class Tile:
 
   def merge_edges_at_vertex(
       self,
-      vx:Vertex,
+      v:int,
     ) -> tuple:
     """Merge edges that meet at the supplied Vertex.
 
@@ -1721,10 +1716,10 @@ class Tile:
         be added by the calling context (i.e. the containing Topology).
 
     """
-    v = vx.ID
     to_remove, new_edge = self.get_updated_edges_from_merge(v)
-    if len(v.tiles) > 1:
-      v.tiles[1].get_updated_edges_from_merge(v, new_edge)
+    if len(self.topology.points[v].tiles) > 1:
+      self.topology.tiles[self.topology.points[v].tiles[1]] \
+        .get_updated_edges_from_merge(v, new_edge)
     return to_remove, new_edge
 
 
@@ -1779,7 +1774,7 @@ class Tile:
 
   def get_edge_IDs_including_vertex(
       self,
-      vx:Vertex,
+      v:int,
     ) -> tuple[int]:
     """Get the (two) index positions of the edges that include supplied Vertex.
 
@@ -1790,7 +1785,7 @@ class Tile:
       tuple[int]: two index positions of Edges in edges list that contain v.
 
     """
-    return (i for i, e in enumerate(self.edges) if vx.ID in e.ID)
+    return (i for i, e in enumerate(self.edges) if v in e)
 
 
   def get_merged_edge(self, i:int, j:int) -> Edge:
@@ -1811,7 +1806,8 @@ class Tile:
     if abs(i - j) != 1:
       i, j = j, i
     # get edges and their directions
-    ei, ej = self.edges[i], self.edges[j]
+    ei, ej = (self.topology.edges[self.edges[i]],
+              self.topology.edges[self.edges[j]])
     CWi, CWj = self.edges_CW[i], self.edges_CW[j]
     # DON'T MESS WITH THIS!!!
     # for predecessors (the head) we want everything including the Vertex
@@ -1822,8 +1818,8 @@ class Tile:
     # of the new edge that will be created
     head = ei.corners if CWi else ei.corners[::-1]
     tail = ej.corners[1:] if CWj else ej.corners[::-1][1:]
-    v_sequence = (head if CWi else head[::-1]) + (tail if CWj else tail[::-1])
-    return Edge(v_sequence)
+    v_sequence = [*(head if CWi else head[::-1]), *(tail if CWj else tail[::-1])]
+    return Edge(self.topology, v_sequence)
 
 
   def offset_corners(
@@ -2049,23 +2045,23 @@ class Edge:
   def __init__(
       self,
       topology:Topology,
-      corners:list[Vertex],
+      corners:list[int],
     ) -> None:
     """Class constructor.
 
-    Initialises the corners and vertices lists and sets ID to (vertices[0].ID,
-    vertices[1].ID). The vertices list is all the corners with is_tiling_vertex
-    property True -- Note that during initialisation the default of this
-    property is True until after the relations between tiles and vertices have
-    been determined.
+    Initialises the corners and vertices lists and sets ID to tuple(vertices).
+    The vertices list is all the corners with is_tiling_vertex = True. Note that
+    during initialisation this property default True until after relations
+    between tiles and vertices have been determined.
 
     Args:
-      corners (list[Vertex]): list of all corners along the edge.
+      corners (list[int]): list of all corners along the edge.
 
     """
     self.topology = topology
-    self.corners = [v.ID for v in corners]
-    self.vertices = [v.ID for v in corners if v.is_tiling_vertex]
+    self.corners = corners
+    self.vertices = [
+      v for v in corners if self.topology.points[v].is_tiling_vertex]
     self.ID = tuple(self.vertices)
 
 
@@ -2082,16 +2078,6 @@ class Edge:
   def __repr__(self) -> str:
     return str(self)
 
-
-  def get_corner_IDs(self) -> list[int]:
-    """Return the IDs of edge corners.
-
-    Returns:
-      list[int]: IDs of all corners.
-
-    """
-    return self.corners
-  
 
   def get_corners(self) -> list[Vertex]:
     return [self.topology.points[v] for v in self.corners]
@@ -2111,15 +2097,14 @@ class Edge:
     return [self.topology.points[v] for v in self.vertices]
 
 
-  def insert_vertex(self, v:Vertex, predecessor:Vertex) -> list[Edge]:
+  def insert_vertex(self, v:int, predecessor:int) -> list[Edge]:
     """Insert vertex after predecessor and return modified edge and new edge.
 
     If the initial edge was (say) (0 1 2 5) and the predecessor was set to 1
     the returned edges would be (0 1 v) and (v 2 5).
     """
-    v, pred = vx.ID, predecessor.ID
-    i = self.corners.index(pred)
-    new_edge = Edge([v, *self.corners[i + 1:]])
+    i = self.corners.index(predecessor)
+    new_edge = Edge(self.topology, [v, *self.corners[i + 1:]])
     if self.right_tile is not None:
       new_edge.right_tile = self.right_tile
     if self.left_tile is not None:
