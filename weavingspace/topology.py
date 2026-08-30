@@ -23,9 +23,9 @@ SOFTWARE.
 
 from __future__ import annotations
 
+import copy
 import inspect
 import itertools
-import pickle
 import string
 from collections import defaultdict
 from typing import TYPE_CHECKING
@@ -99,40 +99,36 @@ class Topology:
   reference the base unit Tile which corresponds to self.tiles[i].
   """
 
-  tileable: Tileable
+  tileable: Tileable = None
   """the Tileable on which the topology will be based."""
-  tiles: list[Tile]
+  tiles: list[Tile] = []
   """list of the Tiles in the topology. We use polygons returned by the
   tileable.get_local_patch method for these. That is the base tiles and 8
   adjacent copies (for a rectangular tiling), or 6 adjacent copies (for a
   hexagonal tiling)."""
-  points: dict[int, Vertex]
+  points: dict[int, Vertex] = {}
   """dictionary of all points (vertices and corners) in the tiling, keyed by
   Vertex ID."""
-  edges: dict[tuple[int,int], Edge]
+  edges: dict[tuple[int,int], Edge] = {}
   """dictionary of the tiling edges, keyed by Edge ID."""
-  unique_tile_shapes: list[geom.Polygon]
-  """a 'reference' tile shape one per tile shape (up to vertices, so two tiles
-  might be the same shape, but one might have extra vertices induced by the
-  tiling and hence is a different shape under this definition)."""
-  dual_tiles: list[geom.Polygon]
+  dual_tiles: dict[int, geom.Polygon] = {}
   """list of geom.Polygons from which a dual tiling might be constructed."""
   n_tiles: int = 0
   """number of tiles in the base Tileable (retained for convenience)."""
-  shape_groups: list[list[int]]
+  shape_groups: list[list[int]] = []
   """list of lists of tile IDs distinguished by shape and optionally tile_id"""
-  tile_matching_transforms: list[tuple[float]]
+  tile_matching_transforms: list[tuple[float]] = []
   """shapely transform tuples that map tiles onto other tiles"""
-  tile_transitivity_classes: list[tuple[int]]
+  tile_transitivity_classes: list[tuple[int]] = []
   """list of lists of tile IDs in each transitivity class"""
-  vertex_transitivity_classes: list[list[int]]
+  vertex_transitivity_classes: list[list[int]] = []
   """list of lists of vertex IDs in each transitivity class"""
-  edge_transitivity_classes: list[list[tuple[int]]]
+  edge_transitivity_classes: list[list[tuple[int]]] = []
   """list of lists of edge IDs in each transitivity class"""
 
   def __init__(
       self,
-      unit: Tileable,
+      unit: None|Tileable,
       ignore_tile_ids:bool = True,
     ) -> None:
     """Class constructor.
@@ -145,18 +141,19 @@ class Topology:
     """
     # Note that the order of these setup steps is fragile sometimes
     # not obviously so.
-    self.tileable = unit # keep this for reference
-    self.n_tiles = self.tileable.tiles.shape[0]
-    self._initialise_points_into_tiles()
-    self._setup_vertex_tile_relations()
-    self._setup_edges()
-    self._copy_base_tiles_to_patch()
-    self._assign_vertex_and_edge_base_IDs()
-    self._identify_distinct_tile_shapes(ignore_tile_ids)
-    self._find_tile_transitivity_classes(ignore_tile_ids)
-    self._find_vertex_transitivity_classes(ignore_tile_ids)
-    self._find_edge_transitivity_classes(ignore_tile_ids)
-    self.generate_dual()
+    if unit is not None:
+      self.tileable = unit # keep this for reference
+      self.n_tiles = self.tileable.tiles.shape[0]
+      self._initialise_points_into_tiles()
+      self._setup_vertex_tile_relations()
+      self._setup_edges()
+      self._copy_base_tiles_to_patch()
+      self._assign_vertex_and_edge_base_IDs()
+      self._identify_distinct_tile_shapes(ignore_tile_ids)
+      self._find_tile_transitivity_classes(ignore_tile_ids)
+      self._find_vertex_transitivity_classes(ignore_tile_ids)
+      self._find_edge_transitivity_classes(ignore_tile_ids)
+      self.generate_dual()
 
 
   def __str__(self) -> str:
@@ -173,6 +170,45 @@ class Topology:
 
   def __repr__(self) -> str:
     return str(self)
+
+
+  def __deepcopy__(self, memo:dict) -> Topology:
+    if id(self) in memo:
+      return memo[id(self)]
+    new_topo = Topology(None)
+    memo[id(self)] = new_topo
+
+    new_topo.tileable = copy.deepcopy(self.tileable, memo)
+    new_topo.points = {copy.copy(k): copy.deepcopy(v, memo)
+                       for k, v in self.points.items()}
+    new_topo.edges = {copy.deepcopy(k, memo): copy.deepcopy(e, memo)
+                      for k, e in self.edges.items()}
+    new_topo.tiles = [copy.deepcopy(t, memo) for t in self.tiles]
+    new_topo.dual_tiles = {copy.copy(k): copy.deepcopy(t, memo)
+                           for k, t in self.dual_tiles.items()}
+    new_topo.n_tiles = copy.copy(self.n_tiles)
+
+    new_topo.shape_groups = []
+    for group in self.shape_groups:
+      new_topo.shape_groups.append(copy.deepcopy(group))
+
+    new_topo.tile_matching_transforms = []
+    for transforms in self.tile_matching_transforms:
+      new_topo.tile_matching_transforms.append(copy.deepcopy(transforms, memo))
+
+    new_topo.tile_transitivity_classes = []
+    for _class in self.tile_transitivity_classes:
+      new_topo.tile_transitivity_classes.append(copy.deepcopy(_class, memo))
+
+    new_topo.vertex_transitivity_classes = []
+    for _class in self.vertex_transitivity_classes:
+      new_topo.vertex_transitivity_classes.append(copy.deepcopy(_class, memo))
+
+    new_topo.edge_transitivity_classes = []
+    for _class in self.edge_transitivity_classes:
+      new_topo.tile_transitivity_classes.append(copy.deepcopy(_class, memo))
+
+    return new_topo
 
 
   def _initialise_points_into_tiles(self, debug:bool = False) -> None:
@@ -1276,10 +1312,7 @@ class Topology:
     print("CAUTION: new Topology will probably not be correctly labelled. "
           "To build a correct Topology, extract the tileable attribute and "
           "rebuild Topology from that.")
-    # pickle seems to be more reliable than copy.deepcopy here
-    topo = (pickle.loads(pickle.dumps(self))   # noqa: S301
-            if new_topology
-            else self)
+    topo = (copy.deepcopy(self)) if new_topology else self
     transform_args = topo.get_kwargs(getattr(topo, transform_type), **kwargs)
     match transform_type:
       case "zigzag_edge":
@@ -1581,6 +1614,23 @@ class Tile:
 
   def __repr__(self) -> str:
     return str(self)
+
+
+  def __deepcopy(self, memo:dict) -> Tile:
+    if id(self) in memo:
+      return memo[id(self)]
+    new_tile = Tile(copy.copy(self.ID))
+    memo[id(self)] = new_tile
+    new_tile.base_ID = copy.copy(self.base_ID)
+    new_tile.corners = [copy.deepcopy(c, memo) for c in self.corners]
+    new_tile.edges = [copy.deepcopy(e, memo) for e in self.edges]
+    new_tile.edges_CW = [copy.copy(b) for b in self.edges]
+    new_tile.label = copy.copy(self.label)
+    new_tile.shape = copy.deepcopy(self.shape, memo)
+    new_tile.centre = copy.deepcopy(self.centre, memo)
+    new_tile.shape_group = copy.copy(self.shape_group)
+    new_tile.transitivity_class = copy.copy(self.transitivity_class)
+    return new_tile
 
 
   def get_corner_IDs(self) -> list[int]:
@@ -1944,6 +1994,21 @@ class Vertex:
     return str(self)
 
 
+  def __deepcopy(self, memo:dict) -> Vertex:
+    if id(self) in memo:
+      return memo[id(self)]
+    new_vertex = Vertex(
+      copy.deepcopy(self.point, memo), copy.copy(self.ID))
+    memo[id(self)] = new_vertex
+    new_vertex.tiles = [copy.deepcopy(t, memo) for t in self.tiles]
+    new_vertex.neighbours = [copy.copy(i) for i in self.neighbours]
+    new_vertex.base_ID = copy.copy(self.base_ID)
+    new_vertex.transitivity_class = copy.copy(self.transitivity_class)
+    new_vertex.label = copy.copy(self.label)
+    new_vertex.is_tiling_vertex = copy.copy(self.is_tiling_vertex)
+    return new_vertex
+
+
   def get_tile_IDs(self) -> list[int]:
     """Return list of Tile IDs (not the Tiles themselves).
 
@@ -2087,6 +2152,21 @@ class Edge:
 
   def __repr__(self) -> str:
     return str(self)
+
+
+  def __deepcopy(self, memo:dict) -> Edge:
+    if id(self) in memo:
+      return memo[id(self)]
+    new_edge = Edge([copy.deepcopy(c, memo) for c in self.corners])
+    memo[id(self)] = new_edge
+    new_edge.ID = tuple(self.ID)
+    new_edge.vertices = [copy.deepcopy(v, memo) for v in self.vertices]
+    new_edge.right_tile = copy.deepcopy(self.right_tile, memo)
+    new_edge.left_tile = copy.deepcopy(self.left_tile, memo)
+    new_edge.base_ID = tuple(self.base_ID)
+    new_edge.transitivity_class = copy.copy(self.transitivity_class)
+    new_edge.label = copy.copy(self.label)
+    return new_edge
 
 
   def get_corner_IDs(self) -> list[int]:
