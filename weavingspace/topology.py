@@ -1366,8 +1366,8 @@ class Topology:
     self.points = {k: v for k, v in self.points.items()
                    if k not in edge.corners[1:-1]}
     # add the new ones
-    new_corners = [self.add_vertex(geom.Point(xy)).ID for xy in ls.coords]
-    edge.corners = edge.vertices[:1] + new_corners + edge.vertices[-1:]
+    new_corners = [self.add_vertex(geom.Point(xy)).ID for xy in ls.coords[1:-1]]
+    edge.corners = [edge.vertices[0], *new_corners, edge.vertices[-1]]
     if edge.right_tile is not None:
       self.tiles[edge.right_tile].set_corners_from_edges(False)
     if edge.left_tile is not None:
