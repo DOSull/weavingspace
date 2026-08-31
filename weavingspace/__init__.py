@@ -11,7 +11,9 @@ from .weave_matrices import *
 from .weave_unit import *
 from .tile_map import *
 from .symmetry import *
+from .elements import *
 from .topology import *
+from .topology_plot import *
 
 """MIT License.
 
