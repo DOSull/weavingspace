@@ -637,11 +637,8 @@ class Topology:
     for k, v in transforms.items():
       already_exists = False
       for u in uniques.values():
-        already_exists = (
-          v.transform_type != "translation" and
-          (np.allclose(v.transform, u.transform, atol = 1e-4, rtol = 1e-4) or
-          (v.transform_type == u.transform_type and
-           np.isclose(v.angle, u.angle))))
+        already_exists = np.allclose(
+          v.transform, u.transform, atol = 1e-4, rtol = 1e-4)
         if already_exists:
           break
       if not already_exists:
