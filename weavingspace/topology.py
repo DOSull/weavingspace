@@ -594,7 +594,7 @@ class Topology:
     self.tile_matching_transforms = {
       k: Transform("translation", 0, geom.Point(0, 0), v,
                    tiling_utils.get_translation_transform(v[0], v[1]))
-      for k, v in enumerate(self.tileable.get_vectors())}
+      for k, v in enumerate(self.tileable.get_vectors()[:2])}
     if ignore_tile_id_labels:
       n_symmetries = len(self.tile_matching_transforms)
       ptile = self.tileable.prototile.loc[0, "geometry"]
@@ -637,8 +637,11 @@ class Topology:
     for k, v in transforms.items():
       already_exists = False
       for u in uniques.values():
-        already_exists = np.allclose(
-          v.transform, u.transform, atol = 1e-4, rtol = 1e-4)
+        already_exists = (
+          v.transform_type != "translation" and
+          (np.allclose(v.transform, u.transform, atol = 1e-4, rtol = 1e-4) or
+          (v.transform_type == u.transform_type and
+           np.isclose(v.angle, u.angle))))
         if already_exists:
           break
       if not already_exists:
@@ -766,22 +769,24 @@ class Topology:
 
     """
     match_id = -1
+    if isinstance(geom1, Tile):
+      g1 = affine.affine_transform(geom1.shape, transform)
+    elif isinstance(geom1, Vertex):
+      g1 = affine.affine_transform(geom1.point, transform)
+    else:
+      g1 = affine.affine_transform(geom1.get_geometry().centroid, transform)
     for geom2 in geoms2:
       if isinstance(geom1, Tile):
         # an area of intersection based test
-        match = self.polygon_matches(
-          affine.affine_transform(geom1.shape, transform), geom2.shape)
+        match = self.polygon_matches(g1, geom2.shape)
       elif isinstance(geom1, Vertex):
         # distance test
-        match = affine.affine_transform(geom1.point, transform).distance(
-          geom2.point) <= 10 * tiling_utils.RESOLUTION
+        match = g1.distance(geom2.point) <= 10 * tiling_utils.RESOLUTION
       else: # must be an Edge
         # since edges _should not_ intersect this test should work in
         # lieu of a more complete point by point comparison
-        c1 = geom1.get_geometry().centroid
-        c2 = geom2.get_geometry().centroid
-        match = affine.affine_transform(c1, transform) \
-          .distance(c2) <= 10 *tiling_utils.RESOLUTION
+        g2 = geom2.get_geometry().centroid
+        match = g1.distance(g2) <= 10 *tiling_utils.RESOLUTION
       if match:
         return geom2.base_ID
     return match_id
