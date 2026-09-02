@@ -218,11 +218,11 @@ def plot_tiling_symmetries(topo: Topology, **kwargs: dict[str:float]) -> None:
     kwargs: passed through to `_plot_tiling_symmetry`
 
   """
-  n = len(topo.tile_matching_transforms)
+  n = min(len(topo.tile_matching_transforms), 24)
   nc = int(np.ceil(np.sqrt(n)))
   nr = int(np.ceil(n / nc))
   fig = plt.figure(figsize = (12, 12 * nr / nc))
-  for i, tr in enumerate(topo.tile_matching_transforms.values()):
+  for i, tr in enumerate(list(topo.tile_matching_transforms.values())[:n]):
     ax = fig.add_subplot(nr, nc, i + 1)
     _plot_tiling_symmetry(topo, tr, ax, **kwargs)
 

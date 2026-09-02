@@ -135,6 +135,8 @@ class Topology:
   """list of lists of vertex IDs in each transitivity class"""
   edge_transitivity_classes: list[list[tuple[int]]]
   """list of lists of edge IDs in each transitivity class"""
+  sentinal_points: list[geom.Point]
+  """list of points to be used for checking isometries"""
 
   def __init__(
       self,
@@ -160,6 +162,7 @@ class Topology:
       self._setup_edges()
       self._copy_base_tiles_to_patch()
       self._assign_vertex_and_edge_base_IDs()
+      self._set_sentinal_points
       self._identify_distinct_tile_shapes(ignore_tile_ids)
       self._find_tile_transitivity_classes(ignore_tile_ids)
       self._find_vertex_transitivity_classes(ignore_tile_ids)
@@ -366,6 +369,23 @@ class Topology:
           for e0, e1 in zip(tile0.get_edges(), 
                             tile1.get_edges(), strict = True):
             e1.base_ID = e0.base_ID
+
+
+  def _set_sentinal_points(self) -> None:
+    """Set the topology's sentinal points."""
+    # vertices
+    v_sentinal_points = {
+      (v.base_ID, v.point)
+      for v in self.vertices_in_tiles(self.tiles[:self.n_tiles])}
+    # edges
+    e_sentinal_points = {
+      (e.base_ID, e.get_geometry().centroid)
+      for e in self.edges_in_tiles(self.tiles[:self.n_tiles])}
+    # polygons
+    t_sentinal_points = {
+      (t.base_ID, t.centre)
+      for t in self.tiles[:self.n_tiles]
+    }
 
 
   def _copy_base_tiles_to_patch(self) -> None:
