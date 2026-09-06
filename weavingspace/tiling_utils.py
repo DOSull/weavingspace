@@ -446,6 +446,10 @@ def get_incentre(shape:geom.Polygon) -> geom.Point:
   if is_regular_polygon(shape):
     return shape.centroid
   # default tolerance of 1.0 is much too high for our purposes
+  # return polylabel.polylabel(shape, 1)
+  # NOTE: there is an issue with polylabel on some polygons in shapely 2.0.6
+  # so in the sole use of this code in weavingspace in elements.Tile have
+  # switch back to using centroid for now.
   return polylabel.polylabel(shape, tolerance = np.sqrt(shape.area) * 1e-9)
 
 
@@ -476,6 +480,7 @@ def get_apothem(shape:geom.Polygon) -> float:
   """
   if is_regular_polygon(shape):
     return 2 * shape.area / geom.LineString(shape.exterior.coords).length
+  # c = polylabel.polylabel(shape, 1)
   c = polylabel.polylabel(shape, np.sqrt(shape.area) * 1e-9)
   return min([c.distance(e) for e in get_sides(shape)])
 

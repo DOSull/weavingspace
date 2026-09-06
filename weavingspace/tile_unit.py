@@ -277,6 +277,9 @@ class TileUnit(Tileable):
   def _as_circles(self) -> TileUnit:
     """Experimental implementation of returning tiles as their incircles.
 
+    NOTE: this may fail on some polygons because get_incircle relies on shapely
+    polylabel and in some versions that is unreliable on some polygons.
+
     Returns:
         TileUnit: a tiling which replaces each tile with its incircle.
 

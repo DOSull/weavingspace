@@ -157,8 +157,9 @@ class Tile:
   def set_shape_from_corners(self) -> None:
     """Set the shape attribute based on corners, and associated tile centre."""
     self.shape = geom.Polygon([c.point for c in self.get_corners()])
-    self.centre = tiling_utils.get_incentre(
-      tiling_utils.get_clean_polygon(self.shape))
+    self.centre = tiling_utils.get_clean_polygon(self.shape).centroid
+    # self.centre = tiling_utils.get_incentre(
+    #   tiling_utils.get_clean_polygon(self.shape))
 
 
   def set_corners_from_edges(self, update_shape: bool = True) -> None:
