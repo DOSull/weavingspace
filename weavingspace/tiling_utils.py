@@ -443,14 +443,23 @@ def get_incentre(shape:geom.Polygon) -> geom.Point:
     geom.Point: the incentre of the polygon.
 
   """
+  # NOTE: there is an issue with polylabel on some polygons in shapely 2.0.6
+  # so have switched back to this homebrew code for now, pending being able to
+  # transition to shapely 2.1.x at some point
+  # return polylabel.polylabel(shape, tolerance = np.sqrt(shape.area) * 1e-9)
+
+  shape = ensure_cw(shape)
+  corners = get_corners(shape, repeat_first = False)
   if is_regular_polygon(shape):
     return shape.centroid
-  # default tolerance of 1.0 is much too high for our purposes
-  # return polylabel.polylabel(shape, 1)
-  # NOTE: there is an issue with polylabel on some polygons in shapely 2.0.6
-  # so in the sole use of this code in weavingspace in elements.Tile have
-  # switch back to using centroid for now.
-  return polylabel.polylabel(shape, tolerance = np.sqrt(shape.area) * 1e-9)
+  # else find the incentre
+  if not is_tangential(shape):
+    return shape.centroid
+  r = get_apothem(shape)
+  # NOTE: for some reason a simple negative buffer here does not work
+  e1 = geom.LineString(corners[:2]).parallel_offset(r, side = "right")
+  e2 = geom.LineString(corners[1:3]).parallel_offset(r, side = "right")
+  return e1.intersection(e2)
 
 
 def get_incircle(shape:geom.Polygon) -> geom.Polygon:

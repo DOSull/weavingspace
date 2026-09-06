@@ -380,6 +380,7 @@ class Topology:
     and as the points used to check if a symmetry maps the tiling on to itself.
     """
     # vertices
+    self.id_lookups = dict()
     v_sentinel_points = {
       v.base_ID: ((v.point.x, v.point.y), f"v{i}")
       for i, v in enumerate(self.vertices_in_tiles(self.tiles[:self.n_tiles]))}
