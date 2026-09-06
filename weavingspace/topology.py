@@ -135,8 +135,9 @@ class Topology:
   """list of lists of vertex IDs in each transitivity class"""
   edge_transitivity_classes: list[list[tuple[int]]]
   """list of lists of edge IDs in each transitivity class"""
-  sentinal_points: list[geom.Point]
+  sentinel_points: list[geom.Point]
   """list of points to be used for checking isometries"""
+  basis: list[tuple[float, float]]
 
   def __init__(
       self,
@@ -162,12 +163,12 @@ class Topology:
       self._setup_edges()
       self._copy_base_tiles_to_patch()
       self._assign_vertex_and_edge_base_IDs()
-      self._set_sentinal_points
-      self._identify_distinct_tile_shapes(ignore_tile_ids)
-      self._find_tile_transitivity_classes(ignore_tile_ids)
-      self._find_vertex_transitivity_classes(ignore_tile_ids)
-      self._find_edge_transitivity_classes(ignore_tile_ids)
-      self.generate_dual()
+      # self._set_sentinel_points()
+      # self._identify_distinct_tile_shapes(ignore_tile_ids)
+      # self._find_tile_transitivity_classes(ignore_tile_ids)
+      # self._find_vertex_transitivity_classes(ignore_tile_ids)
+      # self._find_edge_transitivity_classes(ignore_tile_ids)
+      # self.generate_dual()
 
 
   def __str__(self) -> str:
@@ -371,21 +372,59 @@ class Topology:
             e1.base_ID = e0.base_ID
 
 
-  def _set_sentinal_points(self) -> None:
-    """Set the topology's sentinal points."""
+  def _set_sentinel_points(self) -> None:
+    """Set the topology's sentinel points.
+
+    A new approach to finding symmetries (from Sept 2026) requires a set of
+    points that will be used both as the centres of potential tiling symmetries
+    and as the points used to check if a symmetry maps the tiling on to itself.
+    """
     # vertices
-    v_sentinal_points = {
-      (v.base_ID, v.point)
-      for v in self.vertices_in_tiles(self.tiles[:self.n_tiles])}
-    # edges
-    e_sentinal_points = {
-      (e.base_ID, e.get_geometry().centroid)
-      for e in self.edges_in_tiles(self.tiles[:self.n_tiles])}
-    # polygons
-    t_sentinal_points = {
-      (t.base_ID, t.centre)
-      for t in self.tiles[:self.n_tiles]
+    v_sentinel_points = {
+      v.base_ID: ((v.point.x, v.point.y), f"v{i}")
+      for i, v in enumerate(self.vertices_in_tiles(self.tiles[:self.n_tiles]))}
+    # edges - their centres
+    e_sentinel_points = {
+      e.base_ID: ((e.get_geometry().centroid.x, 
+                   e.get_geometry().centroid.y), f"e{i}")
+      for i, e in enumerate(self.edges_in_tiles(self.tiles[:self.n_tiles]))}
+    # polygons - their centroids
+    t_sentinel_points = {
+      t.base_ID: ((t.centre.x, t.centre.y), f"t{i}")
+      for i, t in enumerate(self.tiles[:self.n_tiles])
     }
+    self.sentinel_points = [
+       *(v_sentinel_points.values()),
+       *(e_sentinel_points.values()),
+       *(t_sentinel_points.values())]
+
+
+  def _set_basis_matrix(self) -> None:
+    self.basis = np.transpose(np.array(self.tileable.get_vectors()[:2], dtype = float))
+
+
+  def _get_coordinate_reducer(self) -> Callable:
+    """Return function to get coordinates in the unit basis vector space.
+
+    Returns:
+      Callable: a function that given coordinates in self.Tileable coordinate
+        space returns a tuple of fixed precision float coordinates between 0 and
+        1.
+
+    """
+    inverse = np.linalg.inv(self.basis)
+    def reducer(pt) -> tuple[float, float]:
+      result = inverse @ np.array([pt[0], pt[1]], dtype = float)
+      fraction = result - np.floor(result)
+      fraction = np.where(fraction > 1 - 1e-9, 0, fraction)
+      return (float(round(fraction[0], tiling_utils.PRECISION)),
+              float(round(fraction[1], tiling_utils.PRECISION)))
+    return reducer
+
+
+  def _set_symmetry_check_points(self) -> None:
+    reduce = self._get_coordinate_reducer()
+    self.check_points = [reduce(xy) for xy, ID in self.sentinel_points]
 
 
   def _copy_base_tiles_to_patch(self) -> None:

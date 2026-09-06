@@ -23,9 +23,11 @@ SOFTWARE.
 
 from __future__ import annotations
 
+import copy
 import itertools
 import re
 import string
+from collections import defaultdict
 from typing import TYPE_CHECKING, NamedTuple
 
 import geopandas as gpd
@@ -443,7 +445,8 @@ def get_incentre(shape:geom.Polygon) -> geom.Point:
   """
   if is_regular_polygon(shape):
     return shape.centroid
-  return polylabel.polylabel(shape)
+  # default tolerance of 1.0 is much too high for our purposes
+  return polylabel.polylabel(shape, tolerance = np.sqrt(shape.area) * 1e-9)
 
 
 def get_incircle(shape:geom.Polygon) -> geom.Polygon:
@@ -473,7 +476,7 @@ def get_apothem(shape:geom.Polygon) -> float:
   """
   if is_regular_polygon(shape):
     return 2 * shape.area / geom.LineString(shape.exterior.coords).length
-  c = polylabel.polylabel(shape, 1)
+  c = polylabel.polylabel(shape, np.sqrt(shape.area) * 1e-9)
   return min([c.distance(e) for e in get_sides(shape)])
 
 
@@ -1142,3 +1145,138 @@ def get_intersection(line1:StraightLine,
   x = x if x_set else (line1.B * line2.C - line2.B * line1.C) / denominator
   y = y if y_set else (line1.C * line2.A - line2.C * line1.A) / denominator
   return geom.Point(x, y)
+
+
+def are_parallel(v1:Iterable, v2:Iterable) -> np.bool:
+  """Report true if supplied vectors are parallel.
+
+  Args:
+    v1 (Iterable): sequence of floats.
+    v2 (Iterable): sequences of floats.
+
+  Returns:
+    bool: True if the supplied vectors are parallel.
+
+  """
+  return np.isclose(np.linalg.det(np.array([v1, v2])), 0)
+
+
+def are_orthogonal(v1:Iterable, v2:Iterable) -> np.bool:
+  """Report true if supplied vectors are orthogonal.
+
+  Args:
+    v1 (Iterable): sequence of floats.
+    v2 (Iterable): sequences of floats.
+
+  Returns:
+    bool: True if the supplied vectors are orthogonal.
+
+  """
+  l1 = np.hypot(*v1)
+  l2 = np.hypot(*v2)
+  return np.isclose(np.hypot(v2[0] - v1[0], v2[1] - v1[1]),
+                    np.hypot(l1, l2))
+
+def geometry_matches(geom1:geom.Polygon, geom2:geom.Polygon) -> bool:
+  """Report true if supplied polygons are identical.
+
+  Args:
+    geom1 (geom.Polygon): first polygon to check.
+    geom2 (geom.Polygon): second polygon to check.
+
+  Returns:
+    bool: True if polygons match, else False.
+
+  """
+  a = geom1.area
+  return np.isclose(a, geom1.intersection(geom2).area,
+                    rtol = RESOLUTION * 100,
+                    atol = RESOLUTION * 100)
+
+
+def get_counts(seq:Iterable) -> defaultdict[int]:
+  """Count distinct items in supplied iterable and compile to dictionary.
+
+  Args:
+    seq (Iterable): iterable to count items in.
+
+  Returns:
+    defaultdict[int]: dictionary of counts keyed by item.
+
+  """
+  counts = defaultdict(int)
+  for x in seq:
+    counts[x] += 1
+  return counts
+
+
+def minimise_weave_unit(tileable: "WeaveUnit") -> "WeaveUnit":
+  """Return a minimised version of supplied WeaveUnit.
+
+  The WeaveUnit constructor often produces non-minimal units that could be
+  simplified further. This method attempts to reduce the supplied unit to a
+  minimal form.
+
+  Args:
+    tileable (WeaveUnit): the WeaveUnit to minimise.
+
+  Returns:
+    WeaveUnit: a new WeaveUnit that will yield the same pattern when tiled but
+      which consists of fewer elements.
+
+  """
+  n_axes = 3 if tileable.weave_type in ["cube", "hex"] else 2
+  new_unit = copy.deepcopy(tileable)
+  # if any tile_id is singleton then already minimal
+  if any(n == 1 for n in get_counts(tileable.tiles.tile_id).values()):
+    return new_unit
+  # for biaxial only proceed if #strands is same in each direction
+  n_strands = [len(s) for s in tileable.strands.split("|")]
+  if n_axes == 2 and n_strands[0] != n_strands[1]:
+    return new_unit
+  # next get to grips with different sized elements due to aspect < 1
+  areas = [p.area for p in new_unit.tiles.geometry]
+  min_area = min(areas)
+  relative_areas = [int(a / min_area) for a in areas]
+  pieces_by_id_and_area = defaultdict(list)
+  for ID, r_area, tile in zip(new_unit.tiles.tile_id,
+                              relative_areas,
+                              new_unit.tiles.geometry, strict = True):
+    pieces_by_id_and_area[(ID, r_area)].append(tile)
+  v_ij = defaultdict(list)
+  for group in pieces_by_id_and_area.values():
+    for i, tile_i in enumerate(group):
+      for j, tile_j in enumerate(group):
+        if i < j:
+          v = (tile_j.centroid.x - tile_i.centroid.x,
+              tile_j.centroid.y - tile_i.centroid.y)
+          if geometry_matches(
+            tile_j, affine.translate(tile_i, v[0], v[1])):
+              v_ij[v].append((i, j))
+              v_ij[v].append((j, i))
+  v_ij = dict(sorted(v_ij.items(), key = lambda x: len(x[1]), reverse = True))
+  v_ij = list(v_ij.keys())
+  combos = itertools.combinations(v_ij, n_axes)
+  if n_axes == 3:
+    # three vectors that sum to (0, 0)
+    result = [c for c in combos
+              if np.isclose(sum([x for x, y in c]), 0, atol = 1e-6) and
+                 np.isclose(sum([y for x, y in c]), 0, atol = 1e-6)]
+    result = sorted(result,
+                    key = lambda vecs: sum([dx**2 + dy**2 for dx, dy in vecs]))
+  else:
+    # two non-parallel vectors
+    result = [c for c in combos if are_orthogonal(*c) and
+              np.isclose(np.hypot(*c[0]), np.hypot(*c[1]))]
+  new_unit.setup_vectors(*result[0])
+  new_unit.prototile = new_unit.get_prototile_from_vectors()
+  ptile = new_unit.prototile.geometry.loc[0]
+  new_tiles = [
+    (ID, t) for ID, t in
+    zip(new_unit.tiles.tile_id, new_unit.tiles.geometry, strict = True)
+    if t.intersection(ptile).area > 0]
+  new_unit.tiles = gpd.GeoDataFrame({
+    "geometry": gpd.GeoSeries([t[1] for t in new_tiles]),
+    "tile_id": [t[0] for t in new_tiles]})
+  new_unit._setup_regularised_prototile()
+  return new_unit
