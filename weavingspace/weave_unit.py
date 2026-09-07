@@ -91,7 +91,7 @@ class WeaveUnit(Tileable):
       self._setup_biaxial_weave_unit()
 
 
-  def _setup_regularised_prototile(self) -> None:
+  def _setup_regularised_prototile(self, override: bool = True) -> None:
     """Set up regularised prototile fully containing all tile elements.
 
     The work is carried out by the two methods  that follow _regularise_tiles()

@@ -28,7 +28,7 @@ import inspect
 import itertools
 import string
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import geopandas as gpd
 import networkx as nx
@@ -135,9 +135,14 @@ class Topology:
   """list of lists of vertex IDs in each transitivity class"""
   edge_transitivity_classes: list[list[tuple[int]]]
   """list of lists of edge IDs in each transitivity class"""
-  sentinel_points: list[geom.Point]
+  check_points: dict
   """list of points to be used for checking isometries"""
-  basis: list[tuple[float, float]]
+  check_points_lookup: defaultdict(set)
+  """lookup from check_points to corresponding element base_IDs."""
+  reducer: Callable
+  """function to reduce coordinates to fractional part of their components"""
+  orbits: defaultdict[set[str]] = None
+  """assignment of element ids to sets under symmetries."""
 
   def __init__(
       self,
@@ -163,12 +168,16 @@ class Topology:
       self._setup_edges()
       self._copy_base_tiles_to_patch()
       self._assign_vertex_and_edge_base_IDs()
-      # self._set_sentinel_points()
+      self._setup_reducer()
+      self._setup_symmetry_check_points()
+      self._check_rotations()
+      self._check_reflections()
+      self._label_elements()
       # self._identify_distinct_tile_shapes(ignore_tile_ids)
       # self._find_tile_transitivity_classes(ignore_tile_ids)
       # self._find_vertex_transitivity_classes(ignore_tile_ids)
       # self._find_edge_transitivity_classes(ignore_tile_ids)
-      # self.generate_dual()
+      self.generate_dual()
 
 
   def __str__(self) -> str:
@@ -372,62 +381,6 @@ class Topology:
             e1.base_ID = e0.base_ID
 
 
-  def _set_sentinel_points(self) -> None:
-    """Set the topology's sentinel points.
-
-    A new approach to finding symmetries (from Sept 2026) requires a set of
-    points that will be used both as the centres of potential tiling symmetries
-    and as the points used to check if a symmetry maps the tiling on to itself.
-    """
-    # vertices
-    self.id_lookups = dict()
-    v_sentinel_points = {
-      v.base_ID: ((v.point.x, v.point.y), f"v{i}")
-      for i, v in enumerate(self.vertices_in_tiles(self.tiles[:self.n_tiles]))}
-    # edges - their centres
-    e_sentinel_points = {
-      e.base_ID: ((e.get_geometry().centroid.x, 
-                   e.get_geometry().centroid.y), f"e{i}")
-      for i, e in enumerate(self.edges_in_tiles(self.tiles[:self.n_tiles]))}
-    # polygons - their centroids
-    t_sentinel_points = {
-      t.base_ID: ((t.centre.x, t.centre.y), f"t{i}")
-      for i, t in enumerate(self.tiles[:self.n_tiles])
-    }
-    self.sentinel_points = [
-       *(v_sentinel_points.values()),
-       *(e_sentinel_points.values()),
-       *(t_sentinel_points.values())]
-
-
-  def _set_basis_matrix(self) -> None:
-    self.basis = np.transpose(np.array(self.tileable.get_vectors()[:2], dtype = float))
-
-
-  def _get_coordinate_reducer(self) -> Callable:
-    """Return function to get coordinates in the unit basis vector space.
-
-    Returns:
-      Callable: a function that given coordinates in self.Tileable coordinate
-        space returns a tuple of fixed precision float coordinates between 0 and
-        1.
-
-    """
-    inverse = np.linalg.inv(self.basis)
-    def reducer(pt) -> tuple[float, float]:
-      result = inverse @ np.array([pt[0], pt[1]], dtype = float)
-      fraction = result - np.floor(result)
-      fraction = np.where(fraction > 1 - 1e-9, 0, fraction)
-      return (float(round(fraction[0], tiling_utils.PRECISION)),
-              float(round(fraction[1], tiling_utils.PRECISION)))
-    return reducer
-
-
-  def _set_symmetry_check_points(self) -> None:
-    reduce = self._get_coordinate_reducer()
-    self.check_points = [reduce(xy) for xy, ID in self.sentinel_points]
-
-
   def _copy_base_tiles_to_patch(self) -> None:
     """Copy attributes of base tiles to corresponding tiles in radius-1 patch.
 
@@ -504,383 +457,169 @@ class Topology:
         self.edges[new_edge.ID] = new_edge
 
 
-  def _identify_distinct_tile_shapes(
-      self,
-      ignore_tile_id_labels: bool = True,
-    ) -> None:
-    """Identify unique tiles based on their symmetries and shapes.
-
-    At the same time assembles a list of the affine transforms under which
-    matches occurs since these are potential symmetries of the tiling.
-
-    TODO: reimplement consideration of tile_id
-
-    Args:
-      ignore_tile_id_labels (bool): if True only the shape of tiles matters; if
-        False the tile_id label is also considered. Defaults to True.
-
-    """
-    if ignore_tile_id_labels:
-      matches = {}
-      offsets = {}
-      for tile in self.tiles[:self.n_tiles]:
-        matches[tile.base_ID] = [tile.base_ID]
-        matched = False
-        s = Symmetries(tile.shape)
-        for other in self.tiles[:self.n_tiles]:
-          if other.ID > tile.ID:
-            offset = s.get_corner_offset(other.shape)
-            if offset is not None:
-              offsets[tile.base_ID] = offset
-              matches[tile.base_ID].append(other.base_ID)
-              matched = True
-        if not matched:
-          offsets[tile.base_ID] = 0
-      base_groups = list(
-        nx.connected_components(nx.from_dict_of_lists(matches)))
-      self.shape_groups = []
-      for i, group in enumerate(base_groups):
-        full_group = []
-        for tile in self.tiles:
-          if tile.base_ID in group:
-            tile.shape_group = i
-            tile.offset_corners(offsets[tile.base_ID])
-            full_group.append(tile.ID)
-        self.shape_groups.append(full_group)
-    else:
-      self.shape_groups = []
-      for ti in self.tiles[:self.n_tiles]:
-        self.shape_groups.append(
-          [tj.ID for tj in self.tiles if tj.base_ID == ti.base_ID])
-      for i, group in enumerate(self.shape_groups):
-        for j in group:
-          self.tiles[j].shape_group = i
+  def _setup_reducer(self) -> None:
+    """Return function to get coordinates in the unit basis vector space."""
+    basis = np.transpose(np.array(
+      self.tileable.get_vectors()[:2], dtype = float))
+    inverse = np.linalg.inv(basis)
+    def reducer(pt) -> tuple[float, float]:
+      result = inverse @ np.array([pt[0], pt[1]], dtype = float)
+      fraction = result - np.floor(result)
+      fraction = np.where(fraction > 1 - 1e-9, 0, fraction)
+      return (float(round(fraction[0], tiling_utils.PRECISION)),
+              float(round(fraction[1], tiling_utils.PRECISION)))
+    self.reducer = reducer
 
 
-  def _find_tile_transitivity_classes(
-      self,
-      ignore_tile_id_labels: bool = True,
-    ) -> None:
-    """Find tiles equivalent under symmetries.
+  def _setup_symmetry_check_points(self) -> None:
+    """Set the topology's sentinel points and their mapped points."""
 
-    Also update the tile_matching_transforms attribute to contain only those
-    transforms that pass this test.
+    class CheckPoint(NamedTuple):
+      xy: tuple[float, float]
+      id: str
+      type: int
 
-    Args:
-      ignore_tile_id_labels (bool): if True then consider only shapes; if False
-        also consider labels of tiles. Defaults to True.
-
-    """
-    self.tile_matching_transforms = \
-      self.get_potential_symmetries(ignore_tile_id_labels)
-    if ignore_tile_id_labels:
-      base_tiles = self.tiles[:self.n_tiles]
-      # it is quicker (should be!) to only do within shape group tests
-      # often there is only one when it will make no difference
-      by_group_equivalent_tiles = []
-      # maintain a set of transforms still potentially tiling symmetries
-      poss_transforms = set(self.tile_matching_transforms.keys())
-      # and a dictionary of booleans tracking which transforms are still valid
-      eq_under_transform = dict.fromkeys(poss_transforms, True)
-      for g, _ in enumerate(self.shape_groups):
-        by_group_equivalent_tiles.append(set())
-        source_tiles = [tile for tile in base_tiles if tile.shape_group == g]
-        target_tiles = [tile for tile in self.tiles if tile.shape_group == g]
-        for tr in poss_transforms:
-          transform = self.tile_matching_transforms[tr].transform
-          matched_tiles = {}
-          eq_under_transform[tr] = True
-          for source_tile in source_tiles:
-            matched_tile_id = self._match_geoms_under_transform(
-              source_tile, target_tiles, transform)
-            if matched_tile_id == -1:
-              eq_under_transform[tr] = False
-              break
-            matched_tiles[source_tile.ID] = matched_tile_id # actually a base_ID
-          if eq_under_transform[tr]:
-            for k, v in matched_tiles.items():
-              # here we record the transform, in case it is later invalidated
-              by_group_equivalent_tiles[g].add((tr, k, v))
-        # remove valid transforms that didn't make it through this group
-        poss_transforms = {t for t, x in eq_under_transform.items() if x}
-      # compile equivalences from all groups made under still valid transforms
-      # a dict of sets so singletons aren't lost in finding connected components
-      equivalents = {i: set() for i in range(self.n_tiles)}
-      for group_equivalents in by_group_equivalent_tiles:
-        for (tr, tile_i, tile_j) in group_equivalents:
-          if tr in poss_transforms:
-            equivalents[tile_i].add(tile_j)
-      self.tile_matching_transforms = {
-        k: v for k, v in self.tile_matching_transforms.items()
-        if k in poss_transforms}
-      self.tile_transitivity_classes = []
-      equivalents = nx.connected_components(nx.from_dict_of_lists(equivalents))
-      for c, base_IDs in enumerate(equivalents):
-        transitivity_class = []
-        for tile in self.tiles:
-          if tile.base_ID in base_IDs:
-            transitivity_class.append(tile.ID)
-            tile.transitivity_class = c
-        self.tile_transitivity_classes.append(transitivity_class)
-    else:
-      # transitivity classes are just the individual tiles
-      self.tile_transitivity_classes = []
-      for i, tile in enumerate(self.tiles):
-        tile.transitivity_class = tile.base_ID
-        if i < self.n_tiles:
-          self.tile_transitivity_classes.append([tile.ID])
-        else:
-          self.tile_transitivity_classes[tile.base_ID].append(tile.ID)
+    self.check_points = {}
+    self.check_points_lookup = {}
+    # vertices
+    for i, v in enumerate(self.vertices_in_tiles(self.tiles[:self.n_tiles])):
+      pt = (v.point.x, v.point.y)
+      self.check_points[self.reducer(pt)] = CheckPoint(pt, f"v{i}", 0)
+      self.check_points_lookup[f"v{i}"] = v.base_ID
+    for i, e in enumerate(self.edges_in_tiles(self.tiles[:self.n_tiles])):
+      v0 = self.points[e.vertices[0]].point
+      v1 = self.points[e.vertices[1]].point
+      pt = ((v0.x + v1.x) / 2, (v0.y + v1.y) / 2)
+      self.check_points[self.reducer(pt)] = CheckPoint(pt, f"e{i}", 1)
+      self.check_points_lookup[f"e{i}"] = e.base_ID
+    for i, t in enumerate(self.tiles[:self.n_tiles]):
+      pt = (t.centre.x, t.centre.y)
+      self.check_points[self.reducer(pt)] = CheckPoint(pt, f"t{i}", 2)
+      self.check_points_lookup[f"t{i}"] = t.base_ID
 
 
-  def get_potential_symmetries(
-      self,
-      ignore_tile_id_labels: bool = True,
-    ) -> dict[int, Transform]:
-    """Assemble potential symmetries from symmetries of prototile and tiles.
-
-    Also remove any duplicates that result. The result is assigned to the
-    tile_matching_transforms attribute.
-
-    TODO: consider retaining the Symmetry objects as these carry additional
-    information that might facilitate labelling under a limited number of the
-    symmetries not all of them.
-
-    Returns:
-      dict[int, tuple[float]]: dictionary of the symmetries (transforms
-        actually) in shapely affine transform 6-tuple format.
-
-    """
-    self.tile_matching_transforms = {
-      k: Transform("translation", 0, geom.Point(0, 0), v,
-                   tiling_utils.get_translation_transform(v[0], v[1]))
-      for k, v in enumerate(self.tileable.get_vectors()[:2])}
-    if ignore_tile_id_labels:
-      n_symmetries = len(self.tile_matching_transforms)
-      ptile = self.tileable.prototile.loc[0, "geometry"]
-      for tr in ShapeMatcher(ptile).get_polygon_matches(ptile):
-        if tr.transform_type not in ["identity", "translation"]:
-          self.tile_matching_transforms[n_symmetries] = tr
-          n_symmetries = n_symmetries + 1
-      for tile in self.tiles[:self.n_tiles]:
-        for tr in ShapeMatcher(tile.shape).get_polygon_matches(tile.shape):
-          if tr.transform_type not in ["identity", "translation"]:
-            self.tile_matching_transforms[n_symmetries] = tr
-            n_symmetries = n_symmetries + 1
-      for tile in self.tiles[:self.n_tiles]:
-        sm = ShapeMatcher(tile.shape)
-        transforms = [sm.get_polygon_matches(self.tiles[i].shape)
-          for i in self.shape_groups[tile.shape_group] if i < self.n_tiles]
-        for tr in itertools.chain(*transforms):
-          if tr.transform_type not in ["identity", "translation"]:
-            self.tile_matching_transforms[n_symmetries] = tr
-            n_symmetries = n_symmetries + 1
-      self.tile_matching_transforms = self._remove_duplicate_symmetries(
-        self.tile_matching_transforms)
-    return self.tile_matching_transforms
+  def _check_rotations(self) -> None:
+    if self.orbits is None:
+      self.orbits = defaultdict(set)
+    max_order = int(Symmetries(
+      self.tileable.prototile.geometry[0]).get_symmetry_group_code()[1])
+    for order in [x for x in [6, 4, 3, 2] if x <= max_order]:
+      angle = 2 * np.pi / order
+      cos, sin = np.cos(angle), np.sin(angle)
+      m = ((cos, -sin), (sin, cos))
+      for centre in self.check_points.values():
+        # Edges can only be centre of 180º rotations
+        if centre.type == 1 and order != 2:
+          continue
+        found = True
+        targets = defaultdict(set)
+        for pt in self.check_points.values():
+          px, py = pt.xy[0] - centre.xy[0], pt.xy[1] - centre.xy[1]
+          pt_dash = self.reducer(
+            (m[0][0] * px + m[0][1] * py + centre.xy[0],
+             m[1][0] * px + m[1][1] * py + centre.xy[1]))
+          if ((pt_dash in self.check_points) and
+              (pt.type == self.check_points[pt_dash].type)):
+            targets[pt_dash].add((pt.id, self.check_points[pt_dash].id))
+          else:
+            found = False
+            break
+        if found:
+          for k, v in targets.items():
+            self.orbits[k] = self.orbits[k].union(*v)
 
 
-  def _remove_duplicate_symmetries(
-      self,
-      transforms: dict[int, Transform],
-    ) -> dict[int,Transform]:
-    """Filter list of shapely affine transforms to remove duplicates.
+  def _check_reflections(self) -> None:
+    if self.orbits is None:
+      self.orbits = defaultdict(set)
+    # reflections can only be tiling symmetries if the mirror is parallel to the
+    # the translation vectors, or along or perpendicular to their angle bisector
+    vs = self.tileable.get_vectors()[:2]
+    vs = [
+      *vs, (vs[0][0] + vs[1][0], vs[0][1] + vs[1][1]),
+      (vs[0][0] - vs[1][0], vs[0][1] - vs[1][1])]
+    directions = [np.atan2(*(v[::-1])) for v in vs]
 
-    Args:
-      transforms (dict[int,Transform]): dictionary of Transforms to filter.
-
-    Returns:
-      dict[int,Transform]: the filtered dictionary with duplicates removed.
-
-    """
-    uniques = {}
-    for k, v in transforms.items():
-      already_exists = False
-      for u in uniques.values():
-        already_exists = np.allclose(
-          v.transform, u.transform, atol = 1e-4, rtol = 1e-4)
-        if already_exists:
-          break
-      if not already_exists:
-        uniques[k] = v
-    return uniques
-
-
-  def _find_vertex_transitivity_classes(
-      self,
-      ignore_tile_id_labels: bool = True,
-    ) -> None:
-    """Find vertex transitivity classes.
-
-    This function checks which vertices align with which others under transforms
-    in the tile_matching_transforms attribute. The process need only determine
-    the classes for vertices in the core tileable.tiles, then assign those to
-    all vertices by matched base_ID.
-    """
-    if ignore_tile_id_labels:
-      equivalent_vertices = defaultdict(set)
-      base_vertices = [v for v in
-                      self.vertices_in_tiles(self.tiles[:self.n_tiles])
-                      if v.is_tiling_vertex]
-      for transform in self.tile_matching_transforms.values():
-        for v in base_vertices:
-          equivalent_vertices[v.ID].add(v.ID)
-          match_ID = self._match_geoms_under_transform(
-            v, base_vertices, transform.transform)
-          if match_ID != -1:
-            equivalent_vertices[v.ID].add(match_ID)
-      equivalent_vertices = self._get_exclusive_supersets(
-        [tuple(sorted(s)) for s in equivalent_vertices.values()])
-      self.vertex_transitivity_classes = defaultdict(list)
-      for c, vclass in enumerate(equivalent_vertices):
-        for v in self.points.values():
-          if v.base_ID in vclass:
-            v.transitivity_class = c
-            self.vertex_transitivity_classes[c].append(v.ID)
-      self.vertex_transitivity_classes = list(
-        self.vertex_transitivity_classes.values())
-      # label vertices based on their transitivity class
-      for v in self.points.values():
-        if v.is_tiling_vertex:
-          v.label = LABELS[v.transitivity_class]
-    else:
-      self.vertex_transitivity_classes = defaultdict(list)
-      for v in self.points.values():
-        if v.is_tiling_vertex:
-          self.vertex_transitivity_classes[v.base_ID].append(v.ID)
-          v.transitivity_class = v.base_ID
-      self.vertex_transitivity_classes = list(
-        self.vertex_transitivity_classes.values())
-      for v in self.points.values():
-        if v.is_tiling_vertex:
-          v.label = LABELS[v.transitivity_class]
+    for direction in directions:
+      cos, sin = np.cos(2 * direction), np.sin(2 * direction)
+      m = ((cos, sin), (sin, -cos))
+      for centre in self.check_points.values():
+        found = True
+        targets = defaultdict(set)
+        for pt in self.check_points.values():
+          px, py = pt.xy[0] - centre.xy[0], pt.xy[1] - centre.xy[1]
+          pt_dash = self.reducer(
+            (m[0][0] * px + m[0][1] * py + centre.xy[0],
+             m[1][0] * px + m[1][1] * py + centre.xy[1]))
+          if ((pt_dash in self.check_points) and
+              (pt.type == self.check_points[pt_dash].type)):
+            targets[pt_dash].add((pt.id, self.check_points[pt_dash].id))
+          else:
+            found = False
+            break
+        if found:
+          for k, v in targets.items():
+            self.orbits[k] = self.orbits[k].union(*v)
 
 
-  def _find_edge_transitivity_classes(
-      self,
-      ignore_tile_id_labels: bool = True,
-    ) -> None:
-    """Find edge transitivity classes.
-
-    This function works by checking which edges align with which others under
-    transforms in the tile_matching_transforms attribute. The process need only
-    determine the classes for edges in the core tileable.tiles, then assign
-    those to all edges by matched base_ID.
-
-    TODO: Note that this code is identical to the vertex transitivity code
-    so it might make sense to merge.
-    """
-    if ignore_tile_id_labels:
-      equivalent_edges = defaultdict(set)
-      base_edges = self.edges_in_tiles(self.tiles[:self.n_tiles])
-      for transform in self.tile_matching_transforms.values():
-        for e in base_edges:
-          equivalent_edges[e.ID].add(e.ID)
-          match_id = self._match_geoms_under_transform(
-            e, base_edges, transform.transform)
-          if match_id != -1:
-            equivalent_edges[e.ID].add(match_id)
-      equivalent_edges = self._get_exclusive_supersets(
-        [tuple(sorted(s)) for s in equivalent_edges.values()])
-      self.edge_transitivity_classes = defaultdict(list)
-      for c, eclass in enumerate(equivalent_edges):
-        for e in self.edges.values():
-          if e.base_ID in eclass:
-            e.transitivity_class = c
-            self.edge_transitivity_classes[c].append(e.ID)
-      self.edge_transitivity_classes = list(
-        self.edge_transitivity_classes.values())
-      # label edges based on their transitivity class
-      for e in self.edges.values():
-        e.label = labels[e.transitivity_class]
-    else:
-      self.edge_transitivity_classes = defaultdict(list)
-      for e in self.edges.values():
-        self.edge_transitivity_classes[e.base_ID].append(e.ID)
-      self.edge_transitivity_classes = list(
-        self.edge_transitivity_classes.values())
-      for i, eclass in enumerate(self.edge_transitivity_classes):
-        for e in eclass:
-          self.edges[e].transitivity_class = i
-          self.edges[e].label = labels[i]
+  def _label_elements(self) -> None:
+    self._setup_transitivity_classes()
+    self._label_vertices()
+    self._label_edges()
+    self._label_tiles()
 
 
-  def _match_geoms_under_transform(
-      self,
-      geom1: Tile | Vertex | Edge,
-      geoms2: list[Tile | Vertex | Edge],
-      transform: tuple[float,...],
-    ) -> int | tuple[int]:
-    """Determine if a geometry maps onto any in a patch under supplied symmetry.
-
-    Args:
-      geom1 (Tile | Vertex | Edge): element whose geometry we want to match.
-      geoms2 (list[Tile | Vertex | Edge]): set of elements among which a
-        match is sought.
-      transform (tuple[float]): shapely affine transform 6-tuple to apply.
-
-    Returns:
-      int | tuple[int, int]: ID of the element in patch that matches the geom1
-        element under the transform if one exists, otherwise returns -1. For
-        edges note that the ID is a tuple.
-
-    """
-    match_id = -1
-    if isinstance(geom1, Tile):
-      g1 = affine.affine_transform(geom1.shape, transform)
-    elif isinstance(geom1, Vertex):
-      g1 = affine.affine_transform(geom1.point, transform)
-    else:
-      g1 = affine.affine_transform(geom1.get_geometry().centroid, transform)
-    for geom2 in geoms2:
-      if isinstance(geom1, Tile):
-        # an area of intersection based test
-        match = self.polygon_matches(g1, geom2.shape)
-      elif isinstance(geom1, Vertex):
-        # distance test
-        match = g1.distance(geom2.point) <= 10 * tiling_utils.RESOLUTION
-      else: # must be an Edge
-        # since edges _should not_ intersect this test should work in
-        # lieu of a more complete point by point comparison
-        g2 = geom2.get_geometry().centroid
-        match = g1.distance(g2) <= 10 *tiling_utils.RESOLUTION
-      if match:
-        return geom2.base_ID
-    return match_id
+  def _setup_transitivity_classes(self) -> None:
+    self.vertex_transitivity_classes = []
+    self.edge_transitivity_classes = []
+    self.tile_transitivity_classes = []
+    element_sets = nx.connected_components(
+      nx.from_edgelist(
+        itertools.chain.from_iterable(
+          [itertools.combinations_with_replacement(x, 2)
+           for x in self.orbits.values()])))
+    for elements in element_sets:
+      element_type = next(iter(elements))[0]
+      if element_type == "v":
+        self.vertex_transitivity_classes.append(list(elements))
+      elif element_type == "e":
+        self.edge_transitivity_classes.append(list(elements))
+      else:
+        self.tile_transitivity_classes.append(list(elements))
 
 
-  def _get_exclusive_supersets(self, sets: list[Iterable]) -> list[Iterable]:
-    """Return sets of elements not found in the same set among those supplied.
+  def _label_vertices(self) -> None:
+    done = set()
+    for i, orbit in enumerate(self.vertex_transitivity_classes):
+      for element_id in orbit:
+        ID = self.check_points_lookup[element_id]
+        if ID in done:
+          continue
+        for v in [v for v in self.points.values() if v.base_ID == ID]:
+          v.label = LABELS[i]
+        done.add(id)
 
-    The supplied sets share elements, i.e., they are non-exclusives sets. The
-    returned sets are exclusive: each element will only appear in one of the
-    sets in the returned list. This is accomplished using networkx's
-    connected components applied to a graph where each intersection between two
-    sets is an edge.
 
-    Args:
-        sets (list[Iterable]): list of lists of possibly overlapping sets.
+  def _label_edges(self) -> None:
+    done = set()
+    for i, orbit in enumerate(self.edge_transitivity_classes):
+      for element_id in orbit:
+        ID = self.check_points_lookup[element_id]
+        if ID in done:
+          continue
+        for e in [e for e in self.edges.values() if e.base_ID == ID]:
+          e.label = labels[i]
 
-    Returns:
-      list[Iterable]: list of lists that include all the original
-        elements without overlaps.
 
-    """
-    overlaps = []
-    for i, si in enumerate(sets):
-      s1 = set(si)
-      for j, sj in enumerate(sets):
-        s2 = set(sj)
-        if len(s1 & s2) > 0:
-          overlaps.append((i, j))
-    G = nx.from_edgelist(overlaps)
-    result = []
-    for component in nx.connected_components(G):
-      s = set()
-      for i in component:
-        s = s.union(sets[i])
-      result.append(tuple(s))
-    return result
+  def _label_tiles(self) -> None:
+    done = set()
+    for i, orbit in enumerate(self.tile_transitivity_classes):
+      for element_id in orbit:
+        ID = self.check_points_lookup[element_id]
+        if ID in done:
+          continue
+        for t in [t for t in self.tiles if t.base_ID == ID]:
+          t.transitivity_class = i
 
 
   def vertices_in_tiles(self, tiles: list[Tile]) -> list[Vertex]:
@@ -988,30 +727,6 @@ class Topology:
     e = Edge(self, vs)
     self.edges[e.ID] = e
     return e
-
-
-  def polygon_matches(self, geom1: geom.Polygon, geom2: geom.Polygon) -> bool:
-    """Test if supplied polygons match geometrically.
-
-    Tests for equality of area, and equality of their area of overlap to their
-    shared area, i.e. Area1 == Area2 == (Area 1 intersection 2).
-
-    Args:
-      geom1 (geom.Polygon): first polygon.
-      geom2 (geom.Polygon): second polygon.
-
-    Returns:
-      bool: True if the polygons are the same, False otherwise.
-
-    """
-    a, b = geom1.area, geom2.area
-    return bool(
-      np.isclose(a, b,
-                 rtol = tiling_utils.RESOLUTION * 100,
-                 atol = tiling_utils.RESOLUTION * 100) and
-      np.isclose(a, geom1.intersection(geom2).area,
-                 rtol = tiling_utils.RESOLUTION * 100,
-                 atol = tiling_utils.RESOLUTION * 100))
 
 
   def transform_geometry(

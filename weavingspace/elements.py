@@ -558,7 +558,7 @@ class Edge:
   Topology's edges dictionary."""
   vertices: list[int]
   """two item list of the end vertices."""
-  corners: list[Vertex]
+  corners: list[int]
   """list of all the vertices in the edge (including its end vertices). In a
   'normal' edge to edge tiling corners and vertices will be identical."""
   right_tile: int = None
