@@ -28,6 +28,7 @@ import inspect
 import itertools
 import string
 from collections import defaultdict
+from enum import Enum
 from typing import TYPE_CHECKING, NamedTuple
 
 import geopandas as gpd
@@ -97,6 +98,12 @@ labels = \
    itertools.product(
     list(string.ascii_lowercase),
     list(string.ascii_lowercase))]
+
+
+class ElementType(Enum):
+  VERTEX = 0
+  EDGE = 1
+  TILE = 2
 
 
 class Topology:
@@ -477,56 +484,70 @@ class Topology:
     class CheckPoint(NamedTuple):
       xy: tuple[float, float]
       id: str
-      type: int
+      type: ElementType
 
     self.check_points = {}
     self.check_points_lookup = {}
     # vertices
     for i, v in enumerate(self.vertices_in_tiles(self.tiles[:self.n_tiles])):
       pt = (v.point.x, v.point.y)
-      self.check_points[self.reducer(pt)] = CheckPoint(pt, f"v{i}", 0)
+      self.check_points[self.reducer(pt)] = CheckPoint(
+        pt, f"v{i}", ElementType.VERTEX)
       self.check_points_lookup[f"v{i}"] = v.base_ID
     for i, e in enumerate(self.edges_in_tiles(self.tiles[:self.n_tiles])):
       v0 = self.points[e.vertices[0]].point
       v1 = self.points[e.vertices[1]].point
       pt = ((v0.x + v1.x) / 2, (v0.y + v1.y) / 2)
-      self.check_points[self.reducer(pt)] = CheckPoint(pt, f"e{i}", 1)
+      self.check_points[self.reducer(pt)] = CheckPoint(
+        pt, f"e{i}", ElementType.EDGE)
       self.check_points_lookup[f"e{i}"] = e.base_ID
     for i, t in enumerate(self.tiles[:self.n_tiles]):
       pt = (t.centre.x, t.centre.y)
-      self.check_points[self.reducer(pt)] = CheckPoint(pt, f"t{i}", 2)
+      self.check_points[self.reducer(pt)] = CheckPoint(
+        pt, f"t{i}", ElementType.TILE)
       self.check_points_lookup[f"t{i}"] = t.base_ID
 
 
   def _check_rotations(self) -> None:
     if self.orbits is None:
       self.orbits = defaultdict(set)
-    max_order = int(Symmetries(
+    order = int(Symmetries(
       self.tileable.prototile.geometry[0]).get_symmetry_group_code()[1])
-    for order in [x for x in [6, 4, 3, 2] if x <= max_order]:
-      angle = 2 * np.pi / order
-      cos, sin = np.cos(angle), np.sin(angle)
-      m = ((cos, -sin), (sin, cos))
-      for centre in self.check_points.values():
-        # Edges can only be centre of 180º rotations
-        if centre.type == 1 and order != 2:
-          continue
-        found = True
-        targets = defaultdict(set)
-        for pt in self.check_points.values():
-          px, py = pt.xy[0] - centre.xy[0], pt.xy[1] - centre.xy[1]
-          pt_dash = self.reducer(
-            (m[0][0] * px + m[0][1] * py + centre.xy[0],
-             m[1][0] * px + m[1][1] * py + centre.xy[1]))
-          if ((pt_dash in self.check_points) and
-              (pt.type == self.check_points[pt_dash].type)):
-            targets[pt_dash].add((pt.id, self.check_points[pt_dash].id))
-          else:
-            found = False
-            break
-        if found:
-          for k, v in targets.items():
-            self.orbits[k] = self.orbits[k].union(*v)
+    while order > 1:
+      if self._check_order_x_rotation(order):
+        break
+      if order in (6, 4):
+        order = 3
+      elif order == 3:
+        order = 2
+      else:
+        break
+
+
+  def _check_order_x_rotation(self, order:int) -> bool:
+    angle = 2 * np.pi / order
+    cos, sin = np.cos(angle), np.sin(angle)
+    m = ((cos, -sin), (sin, cos))
+    for centre in self.check_points.values():
+      # Edges can only be centre of 180º rotations
+      if centre.type == ElementType.EDGE and order != 2:
+        continue
+      found = True
+      targets = defaultdict(set)
+      for pt in self.check_points.values():
+        px, py = pt.xy[0] - centre.xy[0], pt.xy[1] - centre.xy[1]
+        pt_dash = self.reducer(
+          (m[0][0] * px + m[0][1] * py + centre.xy[0],
+            m[1][0] * px + m[1][1] * py + centre.xy[1]))
+        if ((pt_dash in self.check_points) and
+            (pt.type == self.check_points[pt_dash].type)):
+          targets[pt_dash].add((pt.id, self.check_points[pt_dash].id))
+        else:
+          found = False
+          break
+      if found:
+        for k, v in targets.items():
+          self.orbits[k] = self.orbits[k].union(*v)
 
 
   def _check_reflections(self) -> None:
@@ -573,11 +594,13 @@ class Topology:
     self.vertex_transitivity_classes = []
     self.edge_transitivity_classes = []
     self.tile_transitivity_classes = []
+    if len(self.orbits) == 0:
+      self.orbits = {xyt: {pt.id} for xyt, pt in self.check_points.items()}
     element_sets = nx.connected_components(
       nx.from_edgelist(
         itertools.chain.from_iterable(
           [itertools.combinations_with_replacement(x, 2)
-           for x in self.orbits.values()])))
+          for x in self.orbits.values()])))
     for elements in element_sets:
       element_type = next(iter(elements))[0]
       if element_type == "v":

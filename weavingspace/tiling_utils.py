@@ -363,6 +363,10 @@ def is_regular_polygon(shape:geom.Polygon) -> bool:
      and all(np.isclose(angles, angles[0]))
 
 
+def is_convex(shape:geom.Polygon) -> bool:
+  return np.all([a <= 180 for a in get_interior_angles(ensure_cw(shape))])
+
+
 def is_tangential(shape:geom.Polygon) -> bool:
   """Determine if supplied polygon is tangential.
 
