@@ -405,16 +405,11 @@ class Topology:
   def _check_rotations(self) -> None:
     if self.orbits is None:
       self.orbits = defaultdict(set)
-    order = int(Symmetries(
+    max_order = int(Symmetries(
       self.tileable.prototile.geometry[0]).get_symmetry_group_code()[1])
-    while order > 1:
+    orders = (6, 4, 3, 2)
+    for order in (x for x in orders if x <= max_order):
       if self._check_order_x_rotation(order):
-        break
-      if order in (6, 4):
-        order = 3
-      elif order == 3:
-        order = 2
-      else:
         break
 
 
