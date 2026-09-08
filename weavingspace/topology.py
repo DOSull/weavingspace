@@ -172,11 +172,8 @@ class Topology:
       self.n_tiles = self.tileable.tiles.shape[0]
       self._initialise_points_into_tiles()
       self._setup_vertex_tile_relations()
-      # self._classify_vertices()
       self._setup_edges()
       self._drop_scaffolding()
-      # self._copy_base_tiles_to_patch()
-      # self._assign_vertex_and_edge_base_IDs()
       self._setup_reducer()
       self._setup_symmetry_check_points()
       self._check_rotations()
@@ -360,120 +357,6 @@ class Topology:
                    if v in self.vertices_in_tiles(self.tiles)}
     self.edges = {k: v for k, v in self.edges.items()
                   if v in self.edges_in_tiles(self.tiles)}
-
-
-  # def _assign_vertex_and_edge_base_IDs(self, debug: bool = False) -> None:
-  #   """Assign the base_ID attributes of vertices and edges.
-
-  #   These allow us to determine correspondences between vertices and edges in
-  #   the 'base' tiles in the Topology tileable, and those we have added at
-  #   radius 1 for labelling and visualisation.
-  #   """
-  #   self._assign_vertex_base_IDs()
-  #   self._assign_edge_base_IDs()
-
-
-  # def _assign_vertex_base_IDs(self, debug: bool = False) -> None:
-  #   """Assign base_ID attribute of vertices."""
-  #   # assign vertex base_ID from core tiles
-  #   for tile0 in self.tiles[:self.n_tiles]:
-  #     for v in tile0.get_corners():
-  #       v.base_ID = v.ID
-  #   # assign others from their corresponding vertex in the core
-  #   for tile0 in self.tiles[:self.n_tiles]:
-  #     for tile1 in self.tiles[self.n_tiles:]:
-  #       if tile1.base_ID == tile0.base_ID:
-  #         for v0, v1 in zip(tile0.get_corners(),
-  #                           tile1.get_corners(), strict = True):
-  #           v1.base_ID = v0.base_ID
-
-
-  # def _assign_edge_base_IDs(self, debug: bool = False) -> None:
-  #   """Assign base_ID attribute of edges, based on base_IDs of edges."""
-  #   for tile0 in self.tiles[:self.n_tiles]:
-  #     for e in tile0.get_edges():
-  #       e.base_ID = e.ID
-  #   for tile0 in self.tiles[:self.n_tiles]:
-  #     for tile1 in self.tiles[self.n_tiles:]:
-  #       if tile1.base_ID == tile0.base_ID:
-  #         if debug:
-  #           print(f"{tile0.ID=} {tile0.edges} {tile1.ID=} {tile1.edges}")
-  #         for e0, e1 in zip(tile0.get_edges(), 
-  #                           tile1.get_edges(), strict = True):
-  #           e1.base_ID = e0.base_ID
-
-
-  # def _copy_base_tiles_to_patch(self) -> None:
-  #   """Copy attributes of base tiles to corresponding tiles in radius-1 patch.
-
-  #   This requires:
-
-  #   1. Inserting any additional corners in the base tiles not found in the
-  #      radius-1 tiles.
-
-  #   2. Any vertices in the base tiles that are NOT tiling vertices are added
-  #      to radius-1 tiles leading to merging of some edges.
-  #   """
-  #   # the number of tiles in the base + radius-1
-  #   n_all = len(self.tiles)
-  #   # first add any missing vertices to the non-base tiles
-  #   # add all missing vertices before doing any merges
-  #   for tile0 in self.tiles[:self.n_tiles]:
-  #     for tile1 in self.tiles[tile0.ID:n_all:self.n_tiles]:
-  #       self._match_reference_tile_vertices(tile0, tile1)
-  #   # then merge any edges that meet at a corner
-  #   for tile0 in self.tiles[:self.n_tiles]:
-  #     for tile1 in self.tiles[tile0.ID:n_all:self.n_tiles]:
-  #       self._match_reference_tile_corners(tile0, tile1)
-
-
-  # def _match_reference_tile_vertices(self, tile1: Tile, tile2: Tile) -> None:
-  #   """Add vertices to tile2 so it matches tile1 adjusting edges as required.
-
-  #   This assumes the tiles are the same shape, but that tile2 may be missing
-  #   some tiling vertices along some edges.
-
-  #   Args:
-  #     tile1 (Tile): reference tile.
-  #     tile2 (Tile): tile to change.
-
-  #   """
-  #   while len(tile1.corners) > len(tile2.corners):
-  #     # find the reference x-y offset
-  #     dxy = (tile2.centre.x - tile1.centre.x, tile2.centre.y - tile1.centre.y)
-  #     for i, t1c in enumerate([c.point for c in tile1.get_corners()]):
-  #       t2c = tile2.get_corners()[i % len(tile2.get_corners())].point
-  #       if abs((t2c.x - t1c.x) - dxy[0]) > 10 * tiling_utils.RESOLUTION or \
-  #          abs((t2c.y - t1c.y) - dxy[1]) > 10 * tiling_utils.RESOLUTION:
-  #         # add vertex to t2 by copying the t1 vertex appropriately offset
-  #         # note that this might alter the length of t2.corners
-  #         v = self.add_vertex(geom.Point(t1c.x + dxy[0], t1c.y + dxy[1]))
-  #         v.is_tiling_vertex = True
-  #         tile2.insert_vertex_at(v, i)
-
-
-  # def _match_reference_tile_corners(self, tile1: Tile, tile2: Tile) -> None:
-  #   """Make vertices that are corners in tile1 corners in tile2.
-
-  #   Edges are merged as required.
-
-  #   Args:
-  #       tile1 (Tile): reference tile.
-  #       tile2 (Tile): tile to make match.
-
-  #   """
-  #   vs_to_change = [
-  #     vj for vi, vj in zip(
-  #       tile1.get_corners(), tile2.get_corners(), strict = True)
-  #     if not vi.is_tiling_vertex and vj.is_tiling_vertex]
-  #   if len(vs_to_change) > 0:
-  #     for v in vs_to_change:
-  #       v.is_tiling_vertex = False
-  #       # it's a corner not an edge so will have no more than 2 v.tiles
-  #       self.tiles[v.tiles[0]].merge_edges_at_vertex(v.ID)
-  #       # for e in old_edges:
-  #       #   del self.edges[e]
-  #       # self.edges[new_edge.ID] = new_edge
 
 
   def _setup_reducer(self) -> None:
@@ -888,20 +771,6 @@ class Topology:
         higher values will produce a sinusoid. Defaults to 0.
 
     """
-    # v0, v1 = edge.get_vertices()[0], edge.get_vertices()[1]
-    # if n % 2 == 1 and v0.label != start:
-    #   h = -h
-    # ls = self.zigzag_between_points(v0.point, v1.point, n, h, smoothness)
-    # # remove current corners
-    # self.points = {k: v for k, v in self.points.items()
-    #                if k not in edge.corners[1:-1]}
-    # # add the new ones
-    # new_corners = [self.add_vertex(geom.Point(xy)).ID for xy in ls.coords[1:-1]]
-    # edge.corners = [edge.vertices[0], *new_corners, edge.vertices[-1]]
-    # if edge.right_tile is not None:
-    #   self.tiles[edge.right_tile].set_corners_from_edges(False)
-    # if edge.left_tile is not None:
-    #   self.tiles[edge.left_tile].set_corners_from_edges(False)
     corners = []
     for i, (v0, v1) in enumerate(
         zip(edge.get_corners()[:-1], edge.get_corners()[1:], strict = True)):
@@ -1116,5 +985,3 @@ class Topology:
               "label": [e.label for e in self.edges.values()]},
       geometry = gpd.GeoSeries([e.get_geometry().parallel_offset(offset)
                                 for e in self.edges.values()]))
-      # geometry = gpd.GeoSeries([e.get_topological_edge().parallel_offset(offset)
-      #                           for e in self.edges.values()]))
