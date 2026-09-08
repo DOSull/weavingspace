@@ -125,7 +125,7 @@ def _plot_tile_centres(topo: Topology, ax: plt.Axes) -> plt.Axes:
   """
   for tile in topo.tiles:
     ax.annotate(tile.transitivity_class, xy = (tile.centre.x, tile.centre.y),
-                ha = "center", va = "center")
+                ha = "center", va = "center", fontsize = "x-large")
   return ax
 
 
@@ -149,7 +149,7 @@ def _plot_vertex_labels(
   for v in topo.points.values():
     ax.annotate(v.ID if show_vertex_ids else v.label,
                 xy = (v.point.x, v.point.y), color = "k",
-                ha = "center", va = "center")
+                ha = "center", va = "center", fontsize = "x-large")
   return ax
 
 
@@ -190,9 +190,9 @@ def _plot_edges(
     edges = topo._get_edge_geoms().geometry
   if show_edge_labels:
     for ls, e in zip(edges, topo.edges.values(), strict = True):
-      c = ls.centroid
+      c = ls.interpolate(0.5, normalized = True)
       ax.annotate(e.label, xy = (c.x, c.y), color = "k",
-                  ha = "center", va = "center")
+                  ha = "center", va = "center", fontsize = "x-large")
   return ax
 
 
