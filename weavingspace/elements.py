@@ -53,8 +53,6 @@ class Tile:
   ID: int
   """integer ID number which indexes the Tile in the containing Topology tiles
   list."""
-  base_ID: int
-  """ID of corresponding Tile in the base tileable unit"""
   corners: list[int]
   """list of Vertex IDs. This includes all corners of the original polygon
   and any tiling vertices induced by (for example) a the corner of an adjacent
@@ -92,7 +90,7 @@ class Tile:
   transitivity_class: int = None
   """the tile transitivity class of this tile its containing Topology"""
 
-  def __init__(self, topology: Topology, ID: int) -> None:
+  def __init__(self, topology: Topology, ID: int, label: str) -> None:
     """Class constructor.
 
     Args:
@@ -101,6 +99,7 @@ class Tile:
     """
     self.topology = topology
     self.ID = ID
+    self.label = label
     self.corners = []
     self.edges = []
     self.edges_CW = []
@@ -251,76 +250,6 @@ class Tile:
       self.set_shape_from_corners()
 
 
-  def merge_edges_at_vertex(self, v: int) -> tuple:
-    """Merge edges that meet at the supplied Vertex.
-
-    It is assumed that only two tiles are impacted, this one, and its neighbour
-    across the Edge on which v lies. Both are updated. For this reason the work
-    is delegated to `get_updated_edges_from_merge` which is run on both affected
-    tiles, but only determines the edges to remove and the new edge to be added
-    once. See that method for details.
-
-    Args:
-      v (Vertex): Vertex at which to merge Edges. This should currently be an
-        end
-
-    Returns:
-      tuple: 2 item list of the edge IDs to be removed and a new Edge object to
-        be added by the calling context (i.e. the containing Topology).
-
-    """
-    to_remove, new_edge = self.get_updated_edges_from_merge(v)
-    if len(self.topology.points[v].tiles) > 1:
-      self.topology.tiles[self.topology.points[v].tiles[1]] \
-        .get_updated_edges_from_merge(v, new_edge)
-    return to_remove, new_edge
-
-
-  def get_updated_edges_from_merge(
-      self,
-      v: Vertex,
-      new_edge: Edge = None,
-    ) -> tuple[tuple[tuple[int, int], tuple[int, int]], Edge] | None:
-    """Update edges and edges_CW attributes based on insertion of Vertex.
-
-    If new_edge is supplied then the neighbour tile at v has already created
-    the needed new Edge and this Edge is the one that will be 'slotted in' at
-    the appropriate spot in the edges list.
-
-    The edges_CW is also updated to maintain correct directions of the edges.
-    The corners attribute is unaffected by these changes.
-
-    Args:
-      v (int): ID of Vertex at which to carry out the merge.
-      new_edge (Edge, optional): if another Tile has already carried out this
-        merge this should be the resulting new Edge for insertion into this
-        Tile. Defaults to None (when the new Edge will be constructed).
-
-    Returns:
-      tuple | None: either None (if a new edge was supplied) or a tuple
-        of the two edge IDs to be removed and the new edge added for return to
-        the calling context (i.e. the containing Topology).
-
-    """
-    # get the two edge list index positions in which vertex v is found
-    i, j = self.get_edge_IDs_including_vertex(v)
-    if new_edge is None: # then we must make a new one
-      new_edge = self.get_merged_edge(i, j)
-      # and remove existing edges - these will already have been changed in the
-      # tile's edge list, but still have to delete them from the Topology
-      del self.topology.edges[i]
-      del self.topology.edges[j]
-    if abs(i - j) != 1:
-      # edge indices 'wrap' around from end of edge list to start so drop
-      # first and last current edges and stick new one on at the end
-      self.edges = [*self.edges[1:-1], new_edge.ID]
-    else:
-      # insert new edge into list in place of the two old ones
-      self.edges = [*self.edges[:i], new_edge.ID, *self.edges[j + 1:]]
-    # update the edge directions
-    self.set_edge_directions()
-
-
   def get_edge_IDs_including_vertex(
       self,
       v: int,
@@ -335,58 +264,6 @@ class Tile:
 
     """
     return (i for i, e in enumerate(self.edges) if v in e)
-
-
-  def get_merged_edge(self, i: int, j: int) -> Edge:
-    """Return edge made by merging existing edges at i and j in the edges list.
-
-    For example, if the current list of edge IDs was
-
-        (0 1 2) (4 2) (4 5) (5 0)
-
-    and the merge requested is 0 and 1, the resulting new edge is constructed
-    from vertices (0 1 2 4).
-
-    Returns:
-      Edge: the requested new Edge.
-
-    """
-    # if i and j are not consecutive, then j is predecessor edge
-    if abs(i - j) != 1:
-      i, j = j, i
-    # get edges and their directions
-    ei, ej = (self.topology.edges[self.edges[i]],
-              self.topology.edges[self.edges[j]])
-    CWi, CWj = self.edges_CW[i], self.edges_CW[j]
-    # DON'T MESS WITH THIS!!!
-    # for predecessors (the head) we want everything including the Vertex
-    # where the merge is occurring; for successors (the tail) we want all but
-    # the first Vertex (which is the one where the merge is occurring). In both
-    # cases contingent on whether existing Edges are CW or CCW we may need to
-    # flip the Vertex sequence to ensure that the merge Vertex is in the middle
-    # of the new edge that will be created
-    head = ei.corners if CWi else ei.corners[::-1]
-    tail = ej.corners[1:] if CWj else ej.corners[::-1][1:]
-    v_sequence = [*(head if CWi else head[::-1]), *(tail if CWj else tail[::-1])]
-    return self.topology.add_edge(v_sequence)
-
-
-  def offset_corners(self, offset: int) -> None:
-    """Shift shape, corners, edges, and edges_CW by an offset amount.
-
-    This is used to align tiles that are similar, which is required for correct
-    transfer of 'base' tile labelling on to 'radius 1' tiles during Topology
-    construction.
-
-    Args:
-      offset (int): the number of positions to shift the lists.
-
-    """
-    if offset is not None or offset != 0:
-      self.corners = self.corners[offset:] + self.corners[:offset]
-      self.shape = geom.Polygon([c.point for c in self.get_corners()])
-      self.edges = self.edges[offset:] + self.edges[:offset]
-      self.edges_CW = self.edges_CW[offset:] + self.edges_CW[:offset]
 
 
   def angle_at(self, v: int) -> float:
@@ -423,8 +300,6 @@ class Vertex:
   """list of the immediately adjacent other corner IDs. Only required to
   determine if a point is a tiling vertex (when it will have) three or more
   neighbours, so only IDs are stored."""
-  base_ID: int = 1_000_000
-  """ID of corresponding Vertex in the tileable base_unit"""
   transitivity_class: int = None
   """transitivity class of the vertex under symmetries of the tiling"""
   label: str = ""
@@ -456,7 +331,6 @@ class Vertex:
     self.topology = topology
     self.point = point
     self.ID = ID
-    self.base_ID = self.ID
     self.tiles = []
     self.neighbours = []
 
@@ -570,8 +444,6 @@ class Edge:
   """the tile to the left of the edge traversed from its first to its last
   vertex. Exterior edges of the tiles in a Topology will not have a left_tile.
   """
-  base_ID: tuple[int] = (1_000_000, 1_000_000)
-  """ID of corresponding edge in the base tileable"""
   transitivity_class: int = None
   """transitivity class of the edge under symmetries of the tiling"""
   label: str = ""
