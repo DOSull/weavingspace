@@ -333,10 +333,12 @@ class Topology:
     """Remove tiles from the radius 1 patch.
 
     After initialising tiles and vertices, we no longer need the extra tiles in
-    the radius 1 surround.
+    the radius 1 surround. We use the check_points_lookup data to assist with
+    the tidy up.
 
     """
     self.tiles = self.tiles[:self.n_tiles]
+    # vertices
     retained_vertices = self.vertices_in_tiles(self.tiles)
     v_old_new = {}
     for v in self.points.values():
@@ -350,6 +352,7 @@ class Topology:
     for v in self.points.values():
       v.tiles = [t % self.n_tiles for t in v.tiles]
       v.neighbours = [v_old_new[x] for x in v.neighbours]
+    # edges
     self.edges = {k: v for k, v in self.edges.items()
                   if v in self.edges_in_tiles(self.tiles)}
     for e in self.edges.values():
@@ -357,7 +360,7 @@ class Topology:
         e.left_tile = e.left_tile % self.n_tiles
       if e.right_tile is not None:
         e.right_tile = e.right_tile % self.n_tiles
-    # remove all missing references in check_points_lookup
+    # finally, remove all missing references in check_points_lookup
     for ID, element_set in self.check_points_lookup.items():
       if ID[0] == "v":
         self.check_points_lookup[ID] = {x for x in element_set if x in self.points}
@@ -801,7 +804,9 @@ class Topology:
       ls = self.zigzag_between_points(v0.point, v1.point, n, h, smoothness)
       new_IDs = [self.add_vertex(geom.Point(xy)).ID for xy in ls.coords[1:-1]]
       corners.extend([edge.corners[i], *new_IDs])
-    edge.corners = [*corners, edge.corners[-1]]
+    del self.edges_by_corners[edge.corners]
+    edge.corners = tuple(c for c in [*corners, edge.corners[-1]])
+    self.edges_by_corners[edge.corners] = edge
 
 
   def zigzag_between_points(
