@@ -102,6 +102,18 @@ labels = \
     list(string.ascii_lowercase))]
 
 
+class CheckPoint(NamedTuple):
+  """Convenience wrapper for checkpoint data.
+
+  Only source coordinates and an ID are required, since these are stored
+  keyed by the reduced vector basis space coordinates.
+  """
+
+  xy: tuple[float, float]
+  id: int
+  type: str
+
+
 class Topology:
   """Class to represent topology of a Tileable object.
 
@@ -124,6 +136,8 @@ class Topology:
   Vertex ID."""
   edges: dict[tuple[int,...], Edge]
   """dictionary of the tiling edges, keyed by Edge ID."""
+  edges_by_corners: dict[tuple[int,...], Edge]
+  """reverse lookup for edges by their corner list"""
   n_tiles: int
   """number of tiles in the base Tileable (retained for convenience)."""
   check_points: dict
@@ -157,12 +171,12 @@ class Topology:
       self.tileable = unit # keep this for reference
       self.n_tiles = self.tileable.tiles.shape[0]
       self.debug = debug
+      self._setup_reducer()
       self._initialise_points_into_tiles()
       self._setup_vertex_tile_relations()
       self._setup_edges()
-      self._drop_scaffolding()
-      self._setup_reducer()
       self._setup_symmetry_check_points()
+      self._drop_scaffolding()
       self._check_rotations()
       self._check_reflections()
       self._label_elements()
@@ -277,6 +291,7 @@ class Topology:
 
     """
     self.edges = {}
+    self.edges_by_corners = {}
     for v in self.vertices_in_tiles(self.tiles[:self.n_tiles]):
       v.is_tiling_vertex = len(v.neighbours) > 2
     for tile in self.tiles[:self.n_tiles]:
@@ -288,26 +303,26 @@ class Topology:
       # hence we use lists of IDs not Vertex objects
       if len(vertices) > 1:
         for v1, v2 in zip(vertices, vertices[1:] + vertices[:1], strict = True):
-          ID = tuple(c for c in tile.get_corner_IDs_between(v1.ID, v2.ID))
-          if ID not in self.edges:
+          corners = tuple(c for c in tile.get_corner_IDs_between(v1.ID, v2.ID))
+          if corners not in self.edges_by_corners:
             # check that reverse direction edge is not present first
             if self.debug:
-              print(f"checking for edge {ID=}")
-            r_ID = ID[::-1]
+              print(f"checking for edge {corners=}")
+            r_corners = corners[::-1]
             if self.debug:
-              print(f"checking for reverse edge {r_ID=}")
-            if r_ID in self.edges:
+              print(f"checking for reverse edge {r_corners=}")
+            if r_corners in self.edges_by_corners:
               if self.debug:
-                print(f"reverse edge {r_ID=} found")
+                print(f"reverse edge {r_corners=} found")
               # if it is, then set left_tile and add to tile edges
-              e = self.edges[r_ID]
+              e = self.edges_by_corners[r_corners]
               e.left_tile = tile.ID
               tile.edges.append(e.ID)
             else:
               # we've found a new edge so make and add it
               if self.debug:
-                print(f"adding new_edge {ID=}")
-              e = self.add_edge(ID)
+                print(f"adding new_edge {corners=}")
+              e = self.add_edge(corners)
               e.right_tile = tile.ID
               tile.edges.append(e.ID)
       # initialise the edge direction information in the tile
@@ -322,10 +337,35 @@ class Topology:
 
     """
     self.tiles = self.tiles[:self.n_tiles]
+    retained_vertices = self.vertices_in_tiles(self.tiles)
+    v_old_new = {}
+    for v in self.points.values():
+      if v in retained_vertices:
+        v_old_new[v.ID] = v.ID
+      else:
+        v_old_new[v.ID] = min(next(s for s in self.check_points_lookup.values()
+                              if v.ID in s))
     self.points = {k: v for k, v in self.points.items()
-                   if v in self.vertices_in_tiles(self.tiles)}
+                   if v in retained_vertices}
+    for v in self.points.values():
+      v.tiles = [t % self.n_tiles for t in v.tiles]
+      v.neighbours = [v_old_new[x] for x in v.neighbours]
     self.edges = {k: v for k, v in self.edges.items()
                   if v in self.edges_in_tiles(self.tiles)}
+    for e in self.edges.values():
+      if e.left_tile is not None:
+        e.left_tile = e.left_tile % self.n_tiles
+      if e.right_tile is not None:
+        e.right_tile = e.right_tile % self.n_tiles
+    # remove all missing references in check_points_lookup
+    for ID, element_set in self.check_points_lookup.items():
+      if ID[0] == "v":
+        self.check_points_lookup[ID] = {x for x in element_set if x in self.points}
+      elif ID[0] == "e":
+        self.check_points_lookup[ID] = {x for x in element_set if x in self.edges}
+      else:
+        self.check_points_lookup[ID] = {x for x in element_set if x < self.n_tiles}
+
 
 
   def _setup_reducer(self) -> None:
@@ -389,24 +429,11 @@ class Topology:
       element (Vertex | Edge | Tile): the element itself.
 
     """
-
-    class CheckPoint(NamedTuple):
-      """Convenience wrapper for checkpoint data.
-
-      Only source coordinates and an ID are required, since these are stored
-      keyed by the reduced vector basis space coordinates.
-      """
-
-      xy: tuple[float, float]
-      id: str
-
-    if pt_dash in self.check_points:
-      ID = self.check_points[pt_dash].id
-    else:
-      ID = f"{etype}{len(self.check_points)}"
+    if pt_dash not in self.check_points:
+      ID = f"{etype}{element.ID}"
       self.check_points[pt_dash] = CheckPoint(
-        pt, ID)
-    self.check_points_lookup[ID].add(element.ID)
+        pt, ID, etype)
+    self.check_points_lookup[self.check_points[pt_dash].id].add(element.ID)
 
 
   def _check_rotations(self) -> None:
@@ -628,6 +655,7 @@ class Topology:
     """
     e = Edge(self, vs)
     self.edges[e.ID] = e
+    self.edges_by_corners[e.corners] = e
     return e
 
 
@@ -692,7 +720,6 @@ class Topology:
         for e in topo.edges.values():
           if e.label in selector:
             topo.zigzag_edge(e, **transform_args)
-        self.update_edge_IDs()
       case "rotate_edge":
         for e in topo.edges.values():
           if e.label in selector:
@@ -775,19 +802,6 @@ class Topology:
       new_IDs = [self.add_vertex(geom.Point(xy)).ID for xy in ls.coords[1:-1]]
       corners.extend([edge.corners[i], *new_IDs])
     edge.corners = [*corners, edge.corners[-1]]
-
-
-  def update_edge_IDs(self) -> None:
-    for e in self.edges.values():
-      if tuple(c for c in e.corners) != e.ID:
-        new_ID = tuple(c for c in e.corners)
-        for tile in [self.tiles[e.left_tile], self.tiles[e.right_tile]]:
-          tile.edges = [ID if ID != e.ID else new_ID for ID in tile.edges]
-        self.edge_transitivity_classes[e.transitivity_class] = [
-          ID if ID != e.ID else new_ID 
-          for ID in self.edge_transitivity_classes[e.transitivity_class]]
-        self.edges[new_ID] = self.edges[e.ID]
-        del self.edges[e.ID]
 
 
   def zigzag_between_points(

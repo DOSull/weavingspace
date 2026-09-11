@@ -465,7 +465,7 @@ class Edge:
     self.topology = topology
     self.corners = corners
     self.vertices = [self.corners[0], self.corners[-1]]
-    self.ID = tuple(self.corners)
+    self.ID = len(self.topology.edges)
 
 
   def __str__(self) -> str:
