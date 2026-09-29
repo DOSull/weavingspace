@@ -125,11 +125,15 @@ class Tile:
 
 
   def _set_species(self) -> None:
-    code = itertools.chain.from_iterable(Symmetries(self.shape).poly_code)
-    code_r = itertools.chain.from_iterable(Symmetries(self.shape).poly_code_r)
+    s = Symmetries(self.shape)
+    code1 = list(itertools.chain.from_iterable(s.poly_code))
+    if s.get_symmetry_group_code()[0] == "D":
+      code2 = code1
+    else:
+      code2 = list(itertools.chain.from_iterable(s.poly_code_r))
     self.species = (
-      tuple(float(round(x, 3)) for x in code),
-      tuple(float(round(x, 3)) for x in code_r))
+      tuple(float(round(x, 3)) for x in code1),
+      tuple(float(round(x, 3)) for x in code2))
 
 
   def get_corners(self) -> list[Vertex]:
@@ -595,3 +599,10 @@ class Edge:
     if forward:
       return geom.LineString([v.point for v in self.get_vertices()])
     return geom.LineString([v.point for v in self.get_vertices()[::-1]])
+
+
+  def get_bearing(self) -> float:
+    """Return bearing of edge from vertex to vertex in degrees."""
+    v0, v1 = tuple(v.point for v in self.get_vertices())
+    return np.degrees(np.arctan2(v1.y - v0.y, v1.x - v0.x))
+

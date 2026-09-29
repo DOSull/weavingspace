@@ -212,12 +212,14 @@ class Topology:
     basis = np.transpose(np.array(
       self.tileable.get_vectors()[:2], dtype = float))
     inverse = np.linalg.inv(basis)
+    scale = int(np.floor(np.log10(
+      np.sqrt(self.tileable.prototile.geometry[0].area))))
     def reducer(pt: tuple[float,float]) -> tuple[float,float]:
       result = inverse @ np.array([pt[0], pt[1]], dtype = float)
       fraction = result - np.floor(result)
-      fraction = np.where(fraction > 1 - 1e-9, 0, fraction)
-      return (float(round(fraction[0], tiling_utils.PRECISION)),
-              float(round(fraction[1], tiling_utils.PRECISION)))
+      fraction = np.where(fraction > 1 - 1e-6, 0, fraction)
+      return (float(round(fraction[0], max(7 - scale, 0))),
+              float(round(fraction[1], max(7 - scale, 0))))
     self.reducer = reducer
 
 
@@ -374,13 +376,16 @@ class Topology:
     self.check_points = {}
     self.check_points_lookup = defaultdict(set)
     for v in self.points.values():
+      # pt = (float(round(v.point.x, 6)), float(round(v.point.y, 6)))
       pt = (v.point.x, v.point.y)
       self._add_to_check_points(pt, self.reducer(pt), v)
     for e in self.edges.values():
       halfway = e.get_geometry().interpolate(0.5, normalized = True)
+      # pt = (float(round(halfway.x, 6)), float(round(halfway.y, 6)))
       pt = (halfway.x, halfway.y)
       self._add_to_check_points(pt, self.reducer(pt), e)
     for t in self.tiles:
+      # pt = (float(round(t.centre.x, 6)), float(round(t.centre.y, 6)))
       pt = (t.centre.x, t.centre.y)
       self._add_to_check_points(pt, self.reducer(pt), t)
 
@@ -518,18 +523,10 @@ class Topology:
       print("Checking Reflection symmetries...")
     if self.orbits is None:
       self.orbits = defaultdict(set)
-    # reflections can only be tiling symmetries if they are in mirror lines
-    # that are also mirrors of tiles. 
-    # NOT SURE ABOUT THIS: perhaps also parallel to edges?
-    directions = set(itertools.chain.from_iterable(
-      [[((t.angle + 360) % 180) * np.pi / 180
-        for t in Symmetries(t.shape).get_reflections()]
-        for t in self.tiles]))
-
-    for direction in directions:
+    for mirror in self.get_potential_mirrors():
       if self.debug["reflections"] > 1:
-        print(f"Checking Reflection angle {direction * 180 / np.pi:.1f}º")
-      cos, sin = np.cos(2 * direction), np.sin(2 * direction)
+        print(f"Checking Reflection angle {mirror * 180 / np.pi:.1f}º")
+      cos, sin = np.cos(2 * mirror), np.sin(2 * mirror)
       m = ((cos, sin), (sin, -cos))
       centres = []
       for centre in self.check_points.values():
@@ -547,14 +544,34 @@ class Topology:
             mappings[pt_dash].add((pt.id, self.check_points[pt_dash].id))
           else:
             found = False
+            if pt_dash in self.check_points and self.debug["reflections"] > 2:
+              print(f"""
+              {centre.id}
+              MISMATCH: {pt}
+                        {self.check_points[pt_dash]}""")
             break
         if found:
           for k, v in mappings.items():
             self.orbits[k] = self.orbits[k].union(*v)
           centres.append(centre.id)
       if len(centres) > 0 and self.debug["reflections"] > 1:
-        print(f"Symmetries found: Reflection {direction * 180 / np.pi:.1f}º",
+        print(f"Symmetries found: Reflection {mirror * 180 / np.pi:.1f}º",
               f"through {centres}")
+
+
+  def get_potential_mirrors(self) -> set[float]:
+    """Return set of bearings of potential reflection mirrors."""
+    # reflections can only be tiling symmetries if they are in mirror lines
+    # that are also mirrors of tiles, or parallel/perpendicular to edges
+    t_mirrors = itertools.chain.from_iterable(
+      [[t.angle
+        for t in Symmetries(t.shape).get_reflections()]
+        for t in self.tiles])
+    e_mirrors = itertools.chain.from_iterable(
+      [(e.get_bearing(), e.get_bearing() + 90) for e in self.edges.values()])
+    return {float(round(((a + 360) % 180) * np.pi / 180, 6))
+            for a in [*t_mirrors, *e_mirrors]}
+
 
 
   def _label_elements(self) -> None:
