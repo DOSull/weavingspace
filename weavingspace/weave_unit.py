@@ -116,8 +116,10 @@ class WeaveUnit(Tileable):
       weave_type = self.weave_type, n = self.n, warp = warp_threads,
       weft = weft_threads, tie_up = self._tie_up, tr = self._tr,
       th = self._th)
+    if self.debug:
+      print(f"pattern matrix = {p}")
     self._make_shapes_from_coded_weave_matrix(
-      Loom(p), strand_labels = [weft_threads, warp_threads, []])
+      Loom(p, debug = self.debug), strand_labels = [weft_threads, warp_threads, []])
     bb = self.tiles.total_bounds
     w = (bb[2] - bb[0]) // self.spacing * self.spacing
     h = (bb[3] - bb[1]) // self.spacing * self.spacing
@@ -165,7 +167,7 @@ class WeaveUnit(Tileable):
           warp = strands_2, weft = strands_3),
         weave_matrices.get_weave_pattern_matrix(
           weave_type = "this", tie_up = np.ones((6, 6)),
-          warp = strands_3, weft = strands_1))
+          warp = strands_3, weft = strands_1), debug = self.debug)
     else: # "cube"
       loom = Loom(
       # Note n = (1,2,1,2) is required here to force 6x6 twill
@@ -177,7 +179,7 @@ class WeaveUnit(Tileable):
           warp = strands_2, weft = strands_3),
         weave_matrices.get_weave_pattern_matrix(
           weave_type = "twill", n = (1, 2, 1, 2),
-          warp = strands_3, weft = strands_1))
+          warp = strands_3, weft = strands_1), debug = self.debug)
     return loom
 
 

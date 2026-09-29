@@ -106,12 +106,15 @@ class Loom:
   def __init__(
       self,
       *matrices:np.ndarray,
+      debug: bool = False,
     ) -> None:
     """Return a Loom instance.
 
     Takes either one or three weave matrices as input and initialises the loom
     based on these.
     """
+    if debug:
+      print(f"{matrices}")
     if len(matrices) == 1:
       m = matrices[0]
       self.dimensions = m.shape

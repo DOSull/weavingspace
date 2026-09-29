@@ -23,12 +23,13 @@ SOFTWARE.
 
 from __future__ import annotations
 
+import itertools
 from typing import TYPE_CHECKING
 
 import numpy as np
 import shapely.geometry as geom
 
-from weavingspace import tiling_utils
+from weavingspace import Symmetries, tiling_utils
 
 if TYPE_CHECKING:
   from weavingspace import Topology
@@ -65,6 +66,7 @@ class Tile:
   edges are in clockwise order and others  are in counter-clockwise order.
   These boolean flags are True if the corresponding Edge is clockwise, False if
   counter-clockwise."""
+  species: tuple[float]
   label: str
   """tile_id label from the tileable source"""
   shape: geom.Polygon = None
@@ -103,6 +105,7 @@ class Tile:
     self.corners = []
     self.edges = []
     self.edges_CW = []
+    self.element_type = "t"
 
 
   def __str__(self) -> str:
@@ -119,6 +122,14 @@ class Tile:
 
   def __repr__(self) -> str:
     return str(self)
+
+
+  def _set_species(self) -> None:
+    code = itertools.chain.from_iterable(Symmetries(self.shape).poly_code)
+    code_r = itertools.chain.from_iterable(Symmetries(self.shape).poly_code_r)
+    self.species = (
+      tuple(float(round(x, 3)) for x in code),
+      tuple(float(round(x, 3)) for x in code_r))
 
 
   def get_corners(self) -> list[Vertex]:
@@ -164,10 +175,8 @@ class Tile:
     """Set the shape attribute based on corners, and associated tile centre."""
     self.shape = geom.Polygon([c.point for c in self.get_corners()])
     c_shape = tiling_utils.get_clean_polygon(self.shape)
-    if tiling_utils.is_convex(c_shape):
-      self.centre = tiling_utils.get_incentre(c_shape)
-    else:
-      self.centre = c_shape.centroid
+    # would like to use incentre here, but it is not reliable enough...
+    self.centre = c_shape.centroid
 
 
   def set_corners_from_edges(self, update_shape: bool = True) -> None:
@@ -300,6 +309,7 @@ class Vertex:
   """list of the immediately adjacent other corner IDs. Only required to
   determine if a point is a tiling vertex (when it will have) three or more
   neighbours, so only IDs are stored."""
+  species: tuple[float]
   transitivity_class: int = None
   """transitivity class of the vertex under symmetries of the tiling"""
   label: str = ""
@@ -333,6 +343,7 @@ class Vertex:
     self.ID = ID
     self.tiles = []
     self.neighbours = []
+    self.element_type = "v"
 
 
   def __str__(self) -> str:
@@ -347,6 +358,25 @@ class Vertex:
 
   def __repr__(self) -> str:
     return str(self)
+
+
+  def _set_species(self) -> int:
+    self.clockwise_order_incident_tiles()
+    species1 = [float(round(t.angle_at(self.ID), 3))
+                for t in self.get_tiles()]
+    species2 = [float(round(t.angle_at(self.ID), 3))
+                for t in self.get_tiles()[::-1]]
+    # species.sort()
+    # self.species = tuple(species)
+    species1 = self._cyclic_sort(species1)
+    species2 = self._cyclic_sort(species2)
+    self.species = (species1, species2)
+
+
+  def _cyclic_sort(self, x:list[float]) -> tuple[float]:
+    y = [tuple((x + x)[i:i+len(x)]) for i in range(len(x))]
+    y.sort()
+    return y[0]
 
 
   def get_tiles(self) -> list[Tile]:
@@ -444,6 +474,7 @@ class Edge:
   """the tile to the left of the edge traversed from its first to its last
   vertex. Exterior edges of the tiles in a Topology will not have a left_tile.
   """
+  species: int # pending something better
   transitivity_class: int = None
   """transitivity class of the edge under symmetries of the tiling"""
   label: str = ""
@@ -466,6 +497,7 @@ class Edge:
     self.corners = tuple(c for c in corners)
     self.vertices = [self.corners[0], self.corners[-1]]
     self.ID = len(self.topology.edges)
+    self.element_type = "e"
 
 
   def __str__(self) -> str:
@@ -480,6 +512,10 @@ class Edge:
 
   def __repr__(self) -> str:
     return str(self)
+
+
+  def _set_species(self) -> None:
+    self.species = len(self.corners)
 
 
   def get_corners(self) -> list[Vertex]:

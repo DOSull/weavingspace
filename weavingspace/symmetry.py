@@ -439,8 +439,8 @@ class Symmetries:
 
     """
     # get edge lengths and angles
-    lengths = tiling_utils.get_side_lengths(polygon)
-    raw_angles = tiling_utils.get_interior_angles(polygon)
+    lengths = [float(round(l, 5)) for l in tiling_utils.get_side_lengths(polygon)]
+    raw_angles = [float(round(a, 4)) for a in tiling_utils.get_interior_angles(polygon)]
     if mirrored:
       lengths_r = lengths[::-1]
       angles_r = raw_angles[::-1]

@@ -463,7 +463,9 @@ def get_incentre(shape:geom.Polygon) -> geom.Point:
   # NOTE: for some reason a simple negative buffer here does not work
   e1 = geom.LineString(corners[:2]).parallel_offset(r, side = "right")
   e2 = geom.LineString(corners[1:3]).parallel_offset(r, side = "right")
-  return e1.intersection(e2)
+  xy = e1.intersection(e2)
+  return geom.Point([float(round(xy.x, PRECISION)),
+                     float(round(xy.y, PRECISION))])
 
 
 def get_incircle(shape:geom.Polygon) -> geom.Polygon:
@@ -630,10 +632,14 @@ def get_dual_tile_unit(unit) -> gpd.GeoDataFrame:
   # ensure the resulting face centroids are inside the original tile
   # displaced a little to avoid uncertainties at corners/edges
   # This is a guess at something that _could_ work, which turned out well!
+  v = unit.get_vectors()[:2]
+  dx, dy = v[0][0] * RESOLUTION, v[0][1] * RESOLUTION
   dual_faces = [(f, ID) for f, ID in dual_faces
                 if affine.translate(
-                  unit.get_prototile_from_vectors().loc[0, "geometry"],
-                  RESOLUTION * 10, RESOLUTION * 10).contains(f.centroid)]
+                  # unit.get_prototile_from_vectors().loc[0, "geometry"],
+                  unit.regularised_prototile.geometry[0],
+                  dx, dy).contains(get_incentre(f))]
+                  # RESOLUTION * 10, RESOLUTION * 10).contains(f.centroid)]
   gdf = gpd.GeoDataFrame(
     data = {"tile_id": [f[1] for f in dual_faces]}, crs = unit.crs,
     geometry = gpd.GeoSeries([f[0] for f in dual_faces]))
@@ -1298,3 +1304,27 @@ def minimise_weave_unit(tileable: "WeaveUnit") -> "WeaveUnit":
     "tile_id": [t[0] for t in new_tiles]})
   new_unit._setup_regularised_prototile()
   return new_unit
+
+
+def dot(v1:tuple[float,...], v2:tuple[float]) -> float:
+  """Return dot product of two vectors."""
+  return sum(x1 * x2 for x1, x2 in zip(v1, v2, strict = True))
+
+
+def mag(v:tuple[float,...]) -> float:
+  """Return magnitude of a vector."""
+  return np.sqrt(sum(x ** 2 for x in v))
+
+
+def angle_between(v1:tuple[float,...], v2:tuple[float,...]) -> float:
+  """Return angle between two vectors."""
+  return np.acos(dot(v1, v2) / mag(v1) / mag(v2)) * 180 / np.pi
+
+
+def min_angle_between(v1:tuple[float,...], v2:tuple[float,...]) -> float:
+  """Return angle between two vectors."""
+  a1 = np.acos(dot(v1, v2) / mag(v1) / mag(v2))
+  a2 = np.acos(dot(v1, (-x for x in v2)) / mag(v1) / mag(v2))
+  return min(a1, a2) * 180 / np.pi
+
+

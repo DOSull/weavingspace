@@ -51,34 +51,34 @@ class WeaveGrid:
 
   Atrributes:
     n_axes (int): the number of axes in the weave, 2 or 3.
-      Defaults to 2.
     orientations (tuple[float]: orientations of the two or three
-      axes either (0, -90) or (0, 120, 240). Defaults to (0, -90).
-    spacing (float): spacing of the strands. Defaults to 10_000.
+      axes either (0, -90) or (0, 120, 240).
+    spacing (float): spacing of the strands.
     basis (np.ndarray): matrix to calculate x,y coordinates of a
       site from its (integer) grid coordinates,
     grid_cell (geom.Polygon): the base triangle or square of the grid.
   """
 
-  n_axes:int # = 2
-  orientations:tuple[float,...] # = (0, -90)
-  spacing:float # = 10000
-  basis:np.ndarray #|None = None
-  grid_cell:geom.Polygon #|None = None
+  n_axes: int
+  orientations: tuple[float,...]
+  spacing: float 
+  basis: np.ndarray
+  grid_cell: geom.Polygon
 
   def __init__(
       self,
-      n_axes:int,
-      orientations:tuple[float,...],
-      spacing:float = 10000,
+      n_axes: int,
+      orientations: tuple[float,...],
+      spacing: float = 10000,
     ) -> None:
     """Initialise a WeaveGrid."""
     self.n_axes = n_axes
     self.orientations = orientations
     self.spacing = spacing
     self.basis = self.setup_basis()
-    self.grid_cell = tiling_utils \
-      .get_regular_polygon(self.spacing, 4 if self.n_axes == 2 else 3)
+    self.grid_cell = (
+      tiling_utils.get_regular_polygon(
+        self.spacing, 4 if self.n_axes == 2 else 3))
 
 
   def setup_basis(self) -> np.ndarray:
@@ -104,14 +104,14 @@ class WeaveGrid:
       dx = [self.spacing * np.cos(a) for a in angles]  # [0, 1]
       dy = [self.spacing * np.sin(a) for a in angles]  # [1, 0]
     else: # self.n_axes == 3:
-      angles = [np.pi / 6 * x for x in range(3, 12, 4)]  # [90, 210, 330]
+      angles = [np.pi / 6 * x for x in (3, 7, 11)]  # [90, 210, 330]
       dx = [self.spacing * 2 / 3 * np.cos(a) for a in angles]
       dy = [self.spacing * 2 / 3 * np.sin(a) for a in angles]
     return np.array(dx + dy).reshape((2, self.n_axes))
 
 
   def get_coordinates(self,
-                      coords:tuple[int,...],
+                      coords: tuple[int,...],
                       ) -> np.ndarray:
     """Return Cartesian coordinates of cell centroid from grid coordinates.
 
@@ -126,7 +126,7 @@ class WeaveGrid:
 
 
   def get_grid_cell_at(self,
-                       coords:tuple[int,...]|None = None,
+                       coords: tuple[int,...]|None = None,
                        ) -> geom.Polygon:
     """Return grid cell polygon centred on coords.
 
@@ -140,42 +140,19 @@ class WeaveGrid:
     """
     if coords is None:
       coords = tuple([0] * self.n_axes)
-    if self.grid_cell is None:
-      polygon = tiling_utils \
-        .get_regular_polygon(self.spacing, 4 if self.n_axes == 2 else 3)
-    else:
-      polygon = self.grid_cell
-      xy = self.get_coordinates(coords)
-      polygon = affine.translate(polygon, xy[0], xy[1])
+    polygon = self.grid_cell
+    xy = self.get_coordinates(coords)
+    polygon = affine.translate(polygon, xy[0], xy[1])
     if self.n_axes == 2 or sum(coords) % 2 == 0:
       return polygon
     # triaxial case where triangle cell has to be flipped
     return affine.rotate(polygon, 180, origin = polygon.centroid)
 
 
-  def _get_angles(self,
-                  n:int = 4,
-                  ) -> list[float]:
-    """Return angles to corners of n-gon, with one side parallel to x-axis.
-
-    To determine angles start at 6 o'clock (3pi/2) and add (pi/n), then
-    subtract a series of n - 1 2pi/n steps. Note we subtract due to the CW
-    polygon winding order convention of shapely.
-
-    Args:
-      n (int, optional): Number of sides. Defaults to 4.
-
-    Returns:
-      list[float]: angles in radians.
-
-    """
-    return [(3 * np.pi/2) + (np.pi/n) - (i/n * 2 * np.pi) for i in range(n)]
-
-
   def _get_grid_cell_slices(self,
-                            slice_l:float,
-                            w:float = 1.0,
-                            n_slices:int = 1,
+                            slice_l: float,
+                            w: float = 1.0,
+                            n_slices: int = 1,
                             ) -> list[geom.Polygon]:
     r"""Get list of rectangular polygons represneting 'slices' across cell.
 
@@ -192,7 +169,7 @@ class WeaveGrid:
       /              \
      /________________\
 
-    Horizontal extent is l, total width of the strips is W * self.spacing,
+    Horizontal extent is l, total width of the strips is w * self.spacing,
     they are 'sliced' horizontally in n_slices slices of equal width.
 
     Args:
