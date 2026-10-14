@@ -42,6 +42,7 @@ from weavingspace import (
   Symmetries,
   Tile,
   Tileable,
+  Transform,
   Vertex,
   tiling_utils,
 )
@@ -107,6 +108,26 @@ class CheckPoint(NamedTuple):
   """A crude identifier of geometrically different elements"""
 
 
+class Isometry():
+  """Convenience wrapper for a found isometry."""
+
+  type: str
+  angle: float
+  centre: tuple[float]
+
+  def __init__(self, _type: str, _angle: float, _centre: tuple[float]):
+    self.type = _type
+    self.angle = _angle
+    self.centre = _centre
+
+  def __str__(self) -> str:
+    return " ".join([f"{self.type} {np.degrees(self.angle):.1f}º",
+                     f"({self.centre[0]:.1f}, {self.centre[1]:.1f})"])
+
+  def __repr__(self) -> str:
+    return str(self)
+
+
 class Topology:
   """Class to represent topology of a Tileable object.
 
@@ -119,8 +140,8 @@ class Topology:
 
   tileable: Tileable = None
   """Tileable on which the topology will be based."""
-  tiles: list[Tile]
-  """list of Tiles in the topology. Initially we use polygons returned by
+  tiles: dict[int, Tile]
+  """dictionary of Tiles in the topology. Initially we use polygons returned by
   Tileable.get_local_patch to 'scaffold' building the topology and then throw
   them away and use the Tileable's vectors to identify symmetries thereafter"""
   n_tiles: int
@@ -138,8 +159,7 @@ class Topology:
   check_points: dict
   """dictionary of points derived from tile elements used for symmetry checking
   keyed by projected location in basis vector coordinate space"""
-  check_points_lookup: defaultdict(set)
-  """lookup from check_points to corresponding element IDs"""
+  isometries: set[Isometry]
   orbits: defaultdict[set[str]] = None
   """assignment of element ids to orbits under tiling symmetries"""
   tile_transitivity_classes: list[tuple[int]]
@@ -165,6 +185,10 @@ class Topology:
       debug (bool): detail required in debugging information.
 
     """
+    self.tiles = {}
+    self.points = {}
+    self.edges = {}
+    self.edges_by_corners = {}
     if unit is not None:
       self.tileable = unit
       self.n_tiles = self.tileable.tiles.shape[0]
@@ -172,13 +196,13 @@ class Topology:
         k: 0 if debug is None or k not in debug else debug[k]
         for k in ["vertices", "tiles", "edges", "rotations", "reflections"]}
       self._setup_reducer()
-      self._initialise_points_into_tiles()
-      self._setup_vertex_tile_relations()
-      self._setup_edges()
-      self._setup_symmetry_check_points()
-      self._drop_scaffolding()
-      self._check_rotations()
-      self._check_reflections()
+      self._initialise_points_into_tiles(self.debug["vertices"])
+      self._setup_vertex_tile_relations(self.debug["tiles"])
+      self._tag_vertices()
+      self._setup_edges(self.debug["edges"])
+      self._cleanup_after_initialisation()
+      self._check_rotations(self.debug["rotations"])
+      self._check_reflections(self.debug["reflections"])
       self._label_elements()
 
 
@@ -217,41 +241,45 @@ class Topology:
     def reducer(pt: tuple[float,float]) -> tuple[float,float]:
       result = inverse @ np.array([pt[0], pt[1]], dtype = float)
       fraction = result - np.floor(result)
-      fraction = np.where(fraction > 1 - 1e-6, 0, fraction)
-      return (float(round(fraction[0], max(7 - scale, 0))),
-              float(round(fraction[1], max(7 - scale, 0))))
+      fraction = np.where(fraction > 1 - 1e-5, 0, fraction)
+      return (float(round(fraction[0], max(6 - scale, 0))),
+              float(round(fraction[1], max(6 - scale, 0))))
     self.reducer = reducer
 
 
-  def _initialise_points_into_tiles(self) -> None:
+  def _initialise_points_into_tiles(self, debug:int = 0) -> None:
     """Set up dictionary of unique point locations and assign to Tiles.
 
     As corners of tiles are encountered they are checked to see if they have
     already been added to the Topology.points dictionary. If not they are added.
     If previously added, the ID of that point is added to the corners list of
     current tile.
+
+    Args:
+      debug (int): verbosity of debugging messages.
+
     """
-    if self.debug["vertices"] > 0:
+    if debug > 0:
       print("Initialising points into tiles...")
     shapes = self.tileable.get_local_patch(r = 1, include_0 = True).geometry
     shapes = [tiling_utils.get_clean_polygon(s) for s in shapes]
     labels = list(self.tileable.tiles.tile_id) * (len(shapes) // self.n_tiles)
+    ids = range(len(shapes))
     which_shapes = [any(s1.distance(s2) < tiling_utils.RESOLUTION
-                        for s1 in shapes[:self.n_tiles])
+                    for s1 in shapes[:self.n_tiles])
                     for s2 in shapes]
     shapes = [s for tf, s in zip(which_shapes, shapes, strict = True) if tf]
     labels = [L for tf, L in zip(which_shapes, labels, strict = True) if tf]
-    self.tiles = []
-    self.points = {}
-    for i, (shape, label) in enumerate(zip(shapes, labels, strict = True)):
+    ids = [i for tf, i in zip(which_shapes, ids, strict = True) if tf]
+    for i, shape, label in (zip(ids, shapes, labels, strict = True)):
       tile = Tile(self, i, label) # initialise an empty Tile
-      self.tiles.append(tile)
+      self.tiles[tile.ID] = tile
       corners = tiling_utils.get_corners(shape, repeat_first = False)
       for c in corners:
         prev_vertex = None
         for v in self.points.values():
-          if c.distance(v.point) <= 2 * tiling_utils.RESOLUTION:
-            if self.debug["vertices"] > 1:
+          if c.distance(v.geometry) <= 2 * tiling_utils.RESOLUTION:
+            if debug > 1:
               print(f"Adding existing Vertex {v} to Tile {i}")
             tile.corners.append(v.ID)
             prev_vertex = v
@@ -259,226 +287,248 @@ class Topology:
         if prev_vertex is None:
           v = self.add_vertex(c)
           tile.corners.append(v.ID)
-          if self.debug["vertices"] > 1:
+          if debug > 1:
             print(f"Adding new Vertex {v} to Tile {i}")
 
 
-  def _setup_vertex_tile_relations(self) -> None:
+  def _setup_vertex_tile_relations(self, debug:int = 0) -> None:
     """Determine relations between vertices and tiles.
 
     In particular vertices along tile edges that are not yet in their list of
     vertices are added. This is based on tiles in radius 1 patch, so vertices
     induced in tiles on perimeter can be identified. Meanwhile vertex lists of
     incident tiles and neighbours are set up.
+
+    Args:
+      debug (int): verbosity of debugging messages.
+
     """
-    if self.debug["tiles"] > 0:
+    if debug > 0:
       print("Initialising vertex-tile relations...")
-    for tile in self.tiles:
-      if self.debug["tiles"] > 1:
+    for tile in self.tiles.values():
+      if debug > 1:
         print(f"Checking for vertices incident on Tile {tile.ID}")
       corners = []
       # we need current shape (not yet set) to check for incident vertices
-      shape = geom.Polygon([c.point for c in tile.get_corners()])
+      shape = geom.Polygon([c.geometry for c in tile.get_corners()])
       # get points incident on tile boundary, not already in tile corners
       new_points = [v for v in self.points.values()
                     if v.ID not in tile.corners and
-                    v.point.distance(shape) <= 2 * tiling_utils.RESOLUTION]
+                    v.geometry.distance(shape) <= 2 * tiling_utils.RESOLUTION]
       # iterate over sides of tile to see which side vertex is incident on
       for c1, c2 in tile.get_corner_pairs():
         to_insert = []
         if len(new_points) > 0:
-          if self.debug["tiles"] > 2:
+          if debug > 2:
             print(f"{[v.ID for v in new_points]} incident on tile")
-          ls = geom.LineString([self.points[c1].point, self.points[c2].point])
+          ls = geom.LineString([self.points[c1].geometry, 
+                                self.points[c2].geometry])
           to_insert = [v for v in new_points
-                       if v.point.distance(ls) <= 2 * tiling_utils.RESOLUTION]
+                       if v.geometry.distance(ls) <= 2 * tiling_utils.RESOLUTION]
           if len(to_insert) > 0:
             # sort by distance along side
-            d_along = sorted([(ls.line_locate_point(v.point), v)
+            d_along = sorted([(ls.line_locate_point(v.geometry), v)
                               for v in to_insert], key = lambda x: x[0])
             to_insert = [v.ID for d, v in d_along]
         all_points = [c1, *to_insert, c2]
         for (v1, v2) in itertools.pairwise(all_points):
           self.points[v1].add_tile(tile.ID)
           self.points[v1].add_neighbour(v2)
-          if self.debug["tiles"] > 2:
+          if debug > 2:
             print(f"Adding Tile {tile.ID}, neighbour Vertex{v2} to Vertex {v1}")
         corners.extend(all_points[:-1])
-      if self.debug["tiles"] > 1:
+      if debug > 1:
         print(f"Setting corners of Tile {tile.ID} to {corners}")
       tile.corners = corners
       tile.set_shape_from_corners()
 
 
-  def _setup_edges(self) -> None:
+  def _tag_vertices(self) -> None:
+    for v in self.points.values():
+      v.is_tiling_vertex = len(v.neighbours) > 2
+
+
+  def _setup_edges(self, debug:int = 0) -> None:
     """Set up tiling edges.
 
     Vertices in the core are classified as tiling vertices or not. Then edges
     are created by traversing tile corner lists. Edges are stored once only by
     checking for edges in the reverse direction already stored. Edge right and
     left tiles are initialised. Finally tile edge direction lists are set up.
+
+    Args:
+      debug (int): verbosity of debugging messages.
+
     """
-    if self.debug["edges"] > 0:
+    if debug > 0:
       print("Initialising edges...")
-    self.edges = {}
-    self.edges_by_corners = {}
-    for v in self.vertices_in_tiles(self.tiles[:self.n_tiles]):
-      v.is_tiling_vertex = len(v.neighbours) > 2
-    for tile in self.tiles[:self.n_tiles]:
-      if self.debug["edges"] > 1:
-        print(f"Adding edges from Tile {tile.ID}")
-      tile.edges = []
-      vertices = [v for v in tile.get_corners() if v.is_tiling_vertex]
-      # finding ints in lists is much faster than finding Vertex objects
-      # hence we use lists of IDs not Vertex objects
-      if len(vertices) > 1:
-        for v1, v2 in zip(vertices, vertices[1:] + vertices[:1], strict = True):
-          corners = tuple(c for c in tile.get_corner_IDs_between(v1.ID, v2.ID))
-          if self.debug["edges"] > 2:
-            print(f"Checking for edge {corners=}")
-          if corners not in self.edges_by_corners:
-            r_corners = corners[::-1]
-            if self.debug["edges"] > 2:
-              print(f"Checking for reverse edge {r_corners=}")
-            if r_corners in self.edges_by_corners:
-              if self.debug["edges"] > 2:
-                print(f"Reverse edge {r_corners} found, left tile={tile.ID}")
-              # if it is, then set left_tile and add to tile edges
-              e = self.edges_by_corners[r_corners]
-              e.left_tile = tile.ID
-              tile.edges.append(e.ID)
-            else:
-              if self.debug["edges"] > 2:
-                print(f"Adding new_edge {corners} to Tile {tile.ID}")
-              e = self.add_edge(corners)
-              e.right_tile = tile.ID
-              tile.edges.append(e.ID)
-      # initialise the edge direction information in the tile
-      tile.set_edge_directions()
+    for tile in self.tiles.values():
+      self._process_tile_edges(tile, debug)
+    for e in self.edges.values():
+      if e.left_tile is None and e.corners[::-1] in self.edges_by_corners:
+        e.left_tile = self.edges_by_corners[e.corners::-1].right_tile
+      e.set_geometry()
+      e.set_centre()
 
 
-  def _setup_symmetry_check_points(self) -> None:
-    """Set topology's points and their vector-basis space points.
+  def _process_tile_edges(self, tile:Tile, debug:int = 0) -> None:
+    """Add a single tile to Topology.
 
-    The points are tiling points (vertices and corners), representative tile
-    centres, and edge centres. They are keyed by vector basis space coordinates
-    from self.reducer(). A temporary unique ID of form $#, e.g. "t23" and type
-    flag, 'v', 'e', or 't' are also stored. A lookup relating temporary IDs to
-    source element IDs is also constructed.
+    This function split out to facilitate step-by-step notebook debugging.
+
     """
+    if debug > 1:
+      print(f"Adding edges from Tile {tile.ID}")
+    tile.edges = []
+    vertices = tile.get_corners()
+    # finding ints in lists is much faster than finding Vertex objects
+    # hence we use lists of IDs not Vertex objects
+    if len(vertices) > 1:
+      for v1, v2 in zip(vertices, vertices[1:] + vertices[:1], strict = True):
+        corners = tuple(c for c in tile.get_corner_IDs_between(v1.ID, v2.ID))
+        if debug > 2:
+          print(f"Checking for edge {corners=}")
+        if corners not in self.edges_by_corners:
+          r_corners = corners[::-1]
+          if debug > 2:
+            print(f"Checking for reverse edge {r_corners=}")
+          if r_corners in self.edges_by_corners:
+            # if it is, then set left_tile and add to tile edges
+            e = self.edges_by_corners[r_corners]
+            e.left_tile = tile.ID
+            if debug > 2:
+              print(f"FOUND reverse edge {r_corners} left tile={tile.ID}")
+              print(f"right.tile={e.right_tile} {e.left_tile==e.right_tile}")
+            tile.edges.append(e.ID)
+          else:
+            if debug > 2:
+              print(f"Adding new_edge {corners} to Tile {tile.ID}")
+            e = self.add_edge(corners)
+            e.right_tile = tile.ID
+            tile.edges.append(e.ID)
+    # set edge direction information in tile
+    tile.set_edge_directions()
+
+
+  def _cleanup_after_initialisation(self) -> None:
+    for t in self.tiles.values():
+      if self.n_tiles > t.ID:
+        t._set_species()
+      else:
+        t.species = self.tiles[t.ID % self.n_tiles].species
     for v in self.points.values():
       v._set_species()
     for e in self.edges.values():
       e._set_species()
-    for t in self.tiles:
-      t._set_species()
-
-    self.check_points = {}
-    self.check_points_lookup = defaultdict(set)
+    uniques, t_lookup, v_lookup, e_lookup = \
+      self._get_uniques_and_names_lookups()
+    # relabelling is easier to reason about if we 'over-relabel' even if we
+    # are going to dispose of some of these elements a bit later...
+    # relabel elements in tiles
+    for t in self.tiles.values():
+      # only relabel tiles we are keeping because some member edges
+      # may not have lookups if they clashed with a vertex or tile
+      if self.n_tiles <= t.ID:
+        continue
+      t.corners = [v_lookup[v] for v in t.corners]
+      t.edges = [e_lookup[e] for e in t.edges]
+    # relabel elements in vertices
     for v in self.points.values():
-      # pt = (float(round(v.point.x, 6)), float(round(v.point.y, 6)))
-      pt = (v.point.x, v.point.y)
-      self._add_to_check_points(pt, self.reducer(pt), v)
+      v.neighbours = [v_lookup[v] for v in v.neighbours]
+      v.tiles = [t_lookup[t] for t in v.tiles]
+    # relabel elements in edges
     for e in self.edges.values():
-      halfway = e.get_geometry().interpolate(0.5, normalized = True)
-      # pt = (float(round(halfway.x, 6)), float(round(halfway.y, 6)))
-      pt = (halfway.x, halfway.y)
-      self._add_to_check_points(pt, self.reducer(pt), e)
-    for t in self.tiles:
-      # pt = (float(round(t.centre.x, 6)), float(round(t.centre.y, 6)))
-      pt = (t.centre.x, t.centre.y)
-      self._add_to_check_points(pt, self.reducer(pt), t)
+      e.left_tile = None if e.left_tile is None else t_lookup[e.left_tile]
+      e.right_tile = None if e.right_tile is None else t_lookup[e.right_tile]
+      e.corners = tuple(v_lookup[v] for v in e.corners)
+      e.vertices = tuple(v_lookup[v] for v in e.vertices)
+    # now drop the duplicates
+    self.tiles = {t.ID: t for t in uniques if isinstance(t, Tile)}
+    self.points = {v.ID: v for v in uniques if isinstance(v, Vertex)}
+    self.edges = {e.ID: e for e in uniques if isinstance(e, Edge)}
+    # and build checkpoints dictionary from what's left
+    self.check_points = {}
+    self._add_check_points(self.points, "v")
+    self._add_check_points(self.edges, "e")
+    self._add_check_points(self.tiles, "t")
+    self.isometries = set()
+    self._setup_orbits()
 
 
-  def _add_to_check_points(self, 
-                           pt: tuple[float, float], 
-                           pt_dash: tuple[float, float],
-                           element: Vertex | Edge | Tile,
-                           ) -> None:
-    """Add supplied information to the check points dictionaries.
+  def _get_uniques_and_names_lookups(self):
+    uniques = defaultdict(list)
+    t_lookups, v_lookups, e_lookups = {}, {}, {}
+    for t in self.tiles.values():
+      xy = self.reducer(t.centre)
+      uniques[xy].append(t)
+      t_lookups[t.ID] = uniques[xy][0].ID
+    for v in self.points.values():
+      xy = self.reducer(v.centre)
+      if xy in uniques and not isinstance(uniques[xy][0], Vertex):
+        # this shouldn't happen!
+        continue
+      uniques[xy].append(v)
+      v_lookups[v.ID] = uniques[xy][0].ID
+    for e in self.edges.values():
+      xy = self.reducer(e.centre)
+      if xy in uniques and not isinstance(uniques[xy][0], Edge):
+        # this CAN happen if an edge in the 'outer ring' that should be
+        # be broken at a vertex that isn't present in the tiles used in
+        # initialisation has its indicative centre at a vertex location!
+        continue
+      uniques[xy].append(e)
+      e_lookups[e.ID] = uniques[xy][0].ID
+    return [x[0] for x in uniques.values()], t_lookups, v_lookups, e_lookups
+
+
+  def _add_check_points(self,
+                        elements: dict[Vertex|Edge|Tile],
+                        prefix: str) -> None:
+    for e in elements.values():
+      xy0 = e.centre
+      xy = self.reducer(xy0)
+      self.check_points[xy] = CheckPoint(xy0, f"{prefix}{e.ID}", e.species)
+
+
+  def _setup_orbits(self) -> None:
+    self.orbits = defaultdict(set)
+    for xy, element in self.check_points.items():
+      self.orbits[xy].add(element.id)
+
+
+  def _check_rotations(self, debug:int = 0) -> None:
+    """Check rotation symmetries of the tiling.
 
     Args:
-      pt (tuple[float, float]): coordinates in map space of the point.
-      pt_dash (tuple[float, float]): coordinates in projected vector basis space
-        of check point.
-      element (Vertex | Edge | Tile): the element itself.
+      debug (int): verbosity of debugging messages.
 
     """
-    if pt_dash not in self.check_points:
-      ID = f"{element.element_type}{element.ID}"
-      self.check_points[pt_dash] = CheckPoint(pt, ID, element.species)
-    self.check_points_lookup[self.check_points[pt_dash].id].add(element.ID)
-
-
-  def _drop_scaffolding(self) -> None:
-    """Remove tiles from outside the core.
-
-    After initialising tiles and vertices, we no longer need the extra tiles in
-    the surround. We use the check_points_lookup data to perform the tidy up.
-    """
-    self.tiles = self.tiles[:self.n_tiles]
-
-    # vertices - first determine IDs of the reduced set of vertices
-    v_new = {}
-    for v in self.points.values():
-      v_new[v.ID] = min(next(s for s in self.check_points_lookup.values()
-                             if v.ID in s))
-    # trim back to vertices in retained tiles
-    self.points = {k: v for k, v in self.points.items()
-                   if v in self.vertices_in_tiles(self.tiles)}
-    # finally reassign IDs of vertex tiles and neighbours lists
-    for v in self.points.values():
-      v.tiles = [t % self.n_tiles for t in v.tiles]
-      v.neighbours = [v_new[x] for x in v.neighbours]
-
-    # edges assembled for core tiles only, so no repair is needed
-
-    # finally, remove all now missing references in check_points_lookup
-    for ID, elements in self.check_points_lookup.items():
-      if ID[0] == "v":
-        self.check_points_lookup[ID] = {x for x in elements if x in self.points}
-      elif ID[0] == "e":
-        self.check_points_lookup[ID] = {x for x in elements if x in self.edges}
-      else:
-        self.check_points_lookup[ID] = {x for x in elements if x < self.n_tiles}
-
-
-  def _check_rotations(self) -> None:
-    """Check rotation symmetries of the tiling."""
-    if self.debug["rotations"] > 0:
+    if debug > 0:
       print("Checking rotation symmetries...")
-    if self.orbits is None:
-      self.orbits = defaultdict(set)
     max_order = 6
     orders = (6, 4, 3, 2)
     for order in (x for x in orders if x <= max_order):
-      if self._check_order_x_rotation(order):
+      if self._check_order_x_rotation(order, debug):
         break
 
 
-  def _max_possible_rotation_order(self) -> int|None:
-    n = 360 / tiling_utils.min_angle_between(*self.tileable.get_vectors()[:2])
-    if np.isclose(n, np.round(n, 6)):
-      return int(np.round(n, 6))
-    return None
-
-
-  def _check_order_x_rotation(self, order:int) -> bool:
+  def _check_order_x_rotation(self, order:int, debug:int = 0) -> bool:
     """Check rotation symmetry of specified order.
 
     The order n symmetry is a 360º/n rotation.
 
     Args:
       order (int): an integer 2, 3, 4, or 6.
+      debug (int): level of detail in debug printout.
 
     """
-    if self.debug["rotations"] > 1:
+    if debug > 1:
       print(f"Checking order {order} rotations...")
+    new_isometries = set()
     angle = 2 * np.pi / order
     cos, sin = np.cos(angle), np.sin(angle)
     # form rotation matrix
     m = ((cos, -sin), (sin, cos))
-    centres = []
     for centre in self.check_points.values():
       # edges can only be centre of 180º rotations - more checks here are
       # possible based on symmetries of a tile shape or on degree sequence at
@@ -489,6 +539,8 @@ class Topology:
       # a store for the projected basis-vector locations
       mappings = defaultdict(set)
       for pt in self.check_points.values():
+        if pt.id == centre.id:
+          continue
         px, py = pt.xy[0] - centre.xy[0], pt.xy[1] - centre.xy[1]
         pt_dash = self.reducer(
           (m[0][0] * px + m[0][1] * py + centre.xy[0],
@@ -501,62 +553,88 @@ class Topology:
           mappings[pt_dash].add((pt.id, self.check_points[pt_dash].id))
         else: # if any element doesn't project to check point -> not a symmetry
           found = False
+          if debug > 2:
+            if pt_dash in self.check_points:
+              print(f"""{centre.id:3} MISMATCH {pt}
+             {self.check_points[pt_dash]}""")
+            else:
+              print(f"{centre.id:3} REDUCED-XY {pt_dash} NOT FOUND for {pt.id}")
           break
       if found: # all points projected, so record mappings in orbits dictionary
         for k, v in mappings.items():
           self.orbits[k] = self.orbits[k].union(*v)
-        centres.append(centre.id)
-        break # we only need to find one
-    if found and self.debug["rotations"] > 1:
-      print(f"Symmetries found: Rotation {360 / order}º",
-            f"around {centres}")
+        if debug > 2:
+          print(f"FOUND {angle * 180/np.pi:.1f} rotation in {centre.id}")
+        new_isometries.add(Isometry("Rotation", angle, centre.xy))
+        # break # we only need to find one
+    if len(new_isometries) > 0:
+      self.isometries = self.isometries | new_isometries
+      if debug > 1:
+        print(f"Symmetries found: {new_isometries}")
     return found
 
 
-  def _check_reflections(self) -> None:
+  def _check_reflections(self, debug:int = 0) -> None:
     """Check for reflection symmetries.
 
     This code closely mirrors (no pun intended) rotation symmetry checking of
     _check_for_rotation_symmetries().
+
+    Args:
+      debug (int): verbosity of debugging messages.
+
     """
-    if self.debug["reflections"] > 0:
+    if debug > 0:
       print("Checking Reflection symmetries...")
-    if self.orbits is None:
-      self.orbits = defaultdict(set)
     for mirror in self.get_potential_mirrors():
-      if self.debug["reflections"] > 1:
+      if debug > 1:
         print(f"Checking Reflection angle {mirror * 180 / np.pi:.1f}º")
+      new_isometries = set()
       cos, sin = np.cos(2 * mirror), np.sin(2 * mirror)
       m = ((cos, sin), (sin, -cos))
-      centres = []
       for centre in self.check_points.values():
         found = True
         mappings = defaultdict(set)
         for pt in self.check_points.values():
+          if pt.id == centre.id:
+            continue
           px, py = pt.xy[0] - centre.xy[0], pt.xy[1] - centre.xy[1]
           pt_dash = self.reducer(
             (m[0][0] * px + m[0][1] * py + centre.xy[0],
             m[1][0] * px + m[1][1] * py + centre.xy[1]))
           if (pt_dash in self.check_points and
               pt.id[0] == self.check_points[pt_dash].id[0] and
-              (pt.id[0] == "e" and pt.species == self.check_points[pt_dash].species or
-               pt.id[0] in "vt" and pt.species[0] == self.check_points[pt_dash].species[1])):
+              self._reflection_match(pt, self.check_points[pt_dash])):
             mappings[pt_dash].add((pt.id, self.check_points[pt_dash].id))
           else:
             found = False
-            if pt_dash in self.check_points and self.debug["reflections"] > 2:
-              print(f"""
-              {centre.id}
-              MISMATCH: {pt}
-                        {self.check_points[pt_dash]}""")
+            if debug > 2:
+              if pt_dash in self.check_points:
+                print(f"""{centre.id:3} MISMATCH {pt}
+             {self.check_points[pt_dash]}""")
+              else:
+                print(f"{centre.id:3} REDUCED-XY {pt_dash} NOT FOUND for {pt.id}")
             break
         if found:
           for k, v in mappings.items():
             self.orbits[k] = self.orbits[k].union(*v)
-          centres.append(centre.id)
-      if len(centres) > 0 and self.debug["reflections"] > 1:
-        print(f"Symmetries found: Reflection {mirror * 180 / np.pi:.1f}º",
-              f"through {centres}")
+          if debug > 2:
+            print(f"FOUND reflection in {centre.id} {mirror * 180/np.pi:.1f}")
+          new_isometries.add(Isometry("Reflection", mirror, centre.xy))
+          # break
+      if len(new_isometries) > 0:
+        self.isometries = self.isometries | new_isometries
+        if debug > 1:
+          print(f"Symmetries found: {new_isometries}")
+
+
+  def _reflection_match(self, sp1:CheckPoint, sp2:CheckPoint) -> bool:
+    type1, type2 = sp1.id[0], sp2.id[0]
+    if type1 != type2:
+      return False
+    if type1 in "ev":
+      return sp1.species[0] == sp2.species[1]
+    return sp1.species[0] == sp2.species[1] and sp1.species[2] == sp2.species[2]
 
 
   def get_potential_mirrors(self) -> set[float]:
@@ -565,12 +643,18 @@ class Topology:
     # that are also mirrors of tiles, or parallel/perpendicular to edges
     t_mirrors = itertools.chain.from_iterable(
       [[t.angle
-        for t in Symmetries(t.shape).get_reflections()]
-        for t in self.tiles])
-    e_mirrors = itertools.chain.from_iterable(
-      [(e.get_bearing(), e.get_bearing() + 90) for e in self.edges.values()])
-    return {float(round(((a + 360) % 180) * np.pi / 180, 6))
-            for a in [*t_mirrors, *e_mirrors]}
+        for t in Symmetries(t.geometry).get_reflections()]
+        for t in self.tiles.values()])
+    t_mirrors = {
+      float(round(((a + 360) % 180) * np.pi / 180, 5)) for a in t_mirrors}
+    e_mirrors_parallel = [e.get_bearing() for e in self.edges.values()]
+    e_mirrors_perp = [b + 90 for b in e_mirrors_parallel]
+    e_mirrors_parallel = {float(round(((a + 360) % 180) * np.pi / 180, 5))
+                          for a in e_mirrors_parallel}
+    e_mirrors_perp = [e.get_bearing() + 90 for e in self.edges.values()]
+    e_mirrors_perp = {float(round(((a + 360) % 180) * np.pi / 180, 5))
+                      for a in e_mirrors_perp}
+    return t_mirrors.intersection(e_mirrors_perp).union(e_mirrors_parallel)
 
 
 
@@ -587,10 +671,6 @@ class Topology:
     self.vertex_transitivity_classes = []
     self.edge_transitivity_classes = []
     self.tile_transitivity_classes = []
-    # if not symmetry matches have been recorded make a 'null' set where each
-    # element is in its own unique orbit.
-    if len(self.orbits) == 0:
-      self.orbits = {xyt: {pt.id} for xyt, pt in self.check_points.items()}
     # networkx connected components function is a convenient way to assemble
     # orbits from the sets of unique ids - each orbit is a connected component
     # of element IDs
@@ -612,28 +692,22 @@ class Topology:
   def _label_vertices(self) -> None:
     for i, orbit in enumerate(self.vertex_transitivity_classes):
       for element_id in orbit:
-        IDs = self.check_points_lookup[element_id]
-        for v in [v for v in self.points.values() if v.ID in IDs]:
-          v.label = LABELS[i]
+        self.points[int(element_id[1:])].transitivity_class = LABELS[i]
 
 
   def _label_edges(self) -> None:
     for i, orbit in enumerate(self.edge_transitivity_classes):
       for element_id in orbit:
-        IDs = self.check_points_lookup[element_id]
-        for e in [e for e in self.edges.values() if e.ID in IDs]:
-          e.label = labels[i]
+        self.edges[int(element_id[1:])].transitivity_class = labels[i]
 
 
   def _label_tiles(self) -> None:
     for i, orbit in enumerate(self.tile_transitivity_classes):
       for element_id in orbit:
-        IDs = self.check_points_lookup[element_id]
-        for t in [t for t in self.tiles if t.ID in IDs]:
-          t.transitivity_class = i
+        self.tiles[int(element_id[1:])].transitivity_class = i
 
 
-  def vertices_in_tiles(self, tiles: list[Tile]) -> list[Vertex]:
+  def vertices_in_tiles(self, tiles: dict[Tile]) -> list[Vertex]:
     """Get vertices incident on tiles in supplied list.
 
     Args:
@@ -644,12 +718,12 @@ class Topology:
 
     """
     vs = set()
-    for tile in tiles:
+    for tile in tiles.values():
       vs = vs.union(tile.corners)
     return [self.points[v] for v in vs]
 
 
-  def edges_in_tiles(self, tiles: list[Tile]) -> list[Edge]:
+  def edges_in_tiles(self, tiles: dict[Tile]) -> list[Edge]:
     """Get edges that are part of the boundary of tiles in supplied list.
 
     Args:
@@ -660,7 +734,7 @@ class Topology:
 
     """
     es = set()
-    for tile in tiles:
+    for tile in tiles.values():
       es = es.union(tile.edges)
     return [self.edges[e] for e in es]
 
@@ -781,16 +855,16 @@ class Topology:
             pushes[v.ID] = topo.push_vertex(v, **transform_args)
         for ID, (dx, dy) in pushes.items():
           for v in [v for v in topo.points.values() if v.ID == ID]:
-            v.point = affine.translate(v.point, dx, dy)
+            v.geometry = affine.translate(v.geometry, dx, dy)
       case "nudge_vertex":
          for v in topo.points.values():
           if v.label in selector:
             topo.nudge_vertex(v, **transform_args)
     if apply_to_tiles:
-      for t in topo.tiles:
+      for t in topo.tiles.values():
         t.set_corners_from_edges()
     topo.tileable.tiles.geometry = gpd.GeoSeries(
-      [topo.tiles[i].shape for i in range(topo.n_tiles)])
+      [topo.tiles[i].geometry for i in range(topo.n_tiles)])
     topo.tileable._setup_regularised_prototile()
     return topo
 
@@ -844,7 +918,7 @@ class Topology:
         zip(edge.get_corners()[:-1], edge.get_corners()[1:], strict = True)):
       if n % 2 == 1 and v0.label != start:
         h = -h
-      ls = self.zigzag_between_points(v0.point, v1.point, n, h, smoothness)
+      ls = self.zigzag_between_points(v0.geometry, v1.geometry, n, h, smoothness)
       new_IDs = [self.add_vertex(geom.Point(xy)).ID for xy in ls.coords[1:-1]]
       corners.extend([edge.corners[i], *new_IDs])
     del self.edges_by_corners[edge.corners]
@@ -909,15 +983,15 @@ class Topology:
 
     """
     v0, v1 = edge.get_vertices()
-    ls = geom.LineString([v0.point, v1.point])
+    ls = geom.LineString([v0.geometry, v1.geometry])
     if v0.label == centre:
-      c = v0.point
+      c = v0.geometry
     elif v1.label == centre:
-      c = v1.point
+      c = v1.geometry
     else:
       c = ls.centroid
     ls = affine.rotate(ls, angle, origin = c)
-    v0.point, v1.point = [geom.Point(c) for c in ls.coords]
+    v0.geometry, v1.geometry = [geom.Point(c) for c in ls.coords]
 
 
   def scale_edge(self, edge: Edge, sf: float = 1.0) -> None:
@@ -929,9 +1003,9 @@ class Topology:
 
     """
     v0, v1 = edge.get_vertices()
-    ls = geom.LineString([v0.point, v1.point])
+    ls = geom.LineString([v0.geometry, v1.geometry])
     ls = affine.scale(ls, xfact = sf, yfact = sf, origin = ls.centroid)
-    v0.point, v1.point = [geom.Point(c) for c in ls.coords]
+    v0.geometry, v1.geometry = [geom.Point(c) for c in ls.coords]
 
 
   def push_vertex(self, vertex: Vertex, push_d:float) -> tuple[float]:
@@ -943,9 +1017,9 @@ class Topology:
 
     """
     neighbours = [self.points[v] for v in vertex.neighbours]
-    dists = [vertex.point.distance(v.point) for v in neighbours]
-    x, y = vertex.point.x, vertex.point.y
-    unit_vectors = [((x - v.point.x) / d, (y - v.point.y) / d)
+    dists = [vertex.geometry.distance(v.geometry) for v in neighbours]
+    x, y = vertex.geometry.x, vertex.geometry.y
+    unit_vectors = [((x - v.geometry.x) / d, (y - v.geometry.y) / d)
                     for v, d in zip(neighbours, dists, strict = True)]
     return  (push_d * sum([xy[0] for xy in unit_vectors]),
              push_d * sum([xy[1] for xy in unit_vectors]))
@@ -960,7 +1034,7 @@ class Topology:
       dy (float): y displacement.
 
     """
-    vertex.point = affine.translate(vertex.point, dx, dy)
+    vertex.geometry = affine.translate(vertex.geometry, dx, dy)
 
 
   def _get_tile_geoms(self) -> gpd.GeoDataFrame:
@@ -973,21 +1047,9 @@ class Topology:
     """
     return gpd.GeoDataFrame(
       data = {
-        "transitivity_class": [t.transitivity_class for t in self.tiles],
-        "label": [t.label for t in self.tiles]},
-      geometry = gpd.GeoSeries([t.shape for t in self.tiles]))
-
-
-  def _get_tile_centre_geoms(self) -> gpd.GeoDataFrame:
-    """Return the centre of tiles as a GeoDataFrame.
-
-    Returns:
-      gpd.GeoDataFrame: the tile centres with tile label as an attribute.
-
-    """
-    return gpd.GeoDataFrame(
-      data = {"label": [t.label for t in self.tiles]},
-      geometry = gpd.GeoSeries([t.centre for t in self.tiles]))
+        "transitivity_class": [t.transitivity_class for t in self.tiles.values()],
+        "label": [t.label for t in self.tiles.values()]},
+      geometry = gpd.GeoSeries([t.geometry for t in self.tiles.values()]))
 
 
   def _get_point_geoms(self) -> gpd.GeoDataFrame:
@@ -1005,7 +1067,7 @@ class Topology:
                         if v.is_tiling_vertex],
               "is_tiling_vertex": [v.is_tiling_vertex
                                   for v in self.points.values()]},
-      geometry = gpd.GeoSeries([v.point for v in self.points.values()]))
+      geometry = gpd.GeoSeries([v.geometry for v in self.points.values()]))
 
 
   def _get_vertex_geoms(self) -> gpd.GeoDataFrame:
@@ -1022,7 +1084,7 @@ class Topology:
                                     if v.is_tiling_vertex],
               "label": [v.label for v in self.points.values()
                         if v.is_tiling_vertex]},
-      geometry = gpd.GeoSeries([v.point for v in self.points.values()
+      geometry = gpd.GeoSeries([v.geometry for v in self.points.values()
                                 if v.is_tiling_vertex]))
 
 
@@ -1040,5 +1102,5 @@ class Topology:
       data = {"transitivity_class": [e.transitivity_class
                                     for e in self.edges.values()],
               "label": [e.label for e in self.edges.values()]},
-      geometry = gpd.GeoSeries([e.get_geometry().parallel_offset(offset)
+      geometry = gpd.GeoSeries([e.geometry.parallel_offset(offset)
                                 for e in self.edges.values()]))

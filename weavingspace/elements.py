@@ -27,6 +27,7 @@ import itertools
 from typing import TYPE_CHECKING
 
 import numpy as np
+import shapely.affinity as affine
 import shapely.geometry as geom
 
 from weavingspace import Symmetries, tiling_utils
@@ -69,7 +70,7 @@ class Tile:
   species: tuple[float]
   label: str
   """tile_id label from the tileable source"""
-  shape: geom.Polygon = None
+  geometry: geom.Polygon = None
   """the tile geometry (which may include some redundant points along sides
   where neighbouring tiles induce a tiling vertex). So for example a rectangle
   might have additional points along its sides:
@@ -84,13 +85,14 @@ class Tile:
 
   In the above Tile 1 has additional point A, 2 has B and 3 has C and D induced
   by the corners of neighbouring tiles."""
-  centre: geom.Point = None
-  """a point centre for the Tile (determined by weavingspace.tiling_utils.
-  incentre)."""
+  centre: tuple[float]
+  """a point centre for the Tile."""
   shape_group: int = None
   """the tile shape group of this tile in its containing Topology."""
   transitivity_class: int = None
   """the tile transitivity class of this tile its containing Topology"""
+  centre: geom.Point
+
 
   def __init__(self, topology: Topology, ID: int, label: str) -> None:
     """Class constructor.
@@ -106,6 +108,7 @@ class Tile:
     self.edges = []
     self.edges_CW = []
     self.element_type = "t"
+    self.species = None
 
 
   def __str__(self) -> str:
@@ -125,15 +128,45 @@ class Tile:
 
 
   def _set_species(self) -> None:
-    s = Symmetries(self.shape)
-    code1 = list(itertools.chain.from_iterable(s.poly_code))
+    lengths = tiling_utils.get_side_lengths(self.geometry)
+    scale = int(np.floor(np.log10(max(lengths))))
+    lengths = [float(round(x, 6 - scale)) for x in lengths]
+    angles = [float(round(a, 3))
+              for a in tiling_utils.get_interior_angles(self.geometry)]
+    n_sides = self.get_neighbour_side_counts()
+    code1 = self.get_code(angles, lengths)
+    s = Symmetries(self.geometry)
     if s.get_symmetry_group_code()[0] == "D":
       code2 = code1
     else:
-      code2 = list(itertools.chain.from_iterable(s.poly_code_r))
-    self.species = (
-      tuple(float(round(x, 3)) for x in code1),
-      tuple(float(round(x, 3)) for x in code2))
+      code2 = self.get_code(angles[::-1], 
+                            [lengths[-1], *lengths[:-1]][::-1])
+    self.species = (tuple(code1), tuple(code2), tuple(n_sides))
+
+
+  def get_code(self, 
+               angles:list[float], 
+               lengths:list[float]) -> tuple[float]:
+    """Return a hashable code for polygon based on angles, lengths, n_sides."""
+    pairs = self.cyclic_sort_by_first(angles, lengths)
+    return list(itertools.chain.from_iterable(pairs))
+
+
+  def cyclic_sort_by_first(self,
+                           x:list[float],
+                           y:list[float]) -> list[tuple[float]]:
+    """Return pairs of three lists cyclic sorted by first list."""
+    options = [(i, (x + x)[i:i+len(x)]) for i in range(len(x))]
+    order = [_[0] for _ in sorted(options, key = lambda x: x[1])]
+    return [(y[i], x[i]) for i in order]
+
+
+  def get_neighbour_side_counts(self) -> list[int]:
+    neighbours = [e.left_tile if e.left_tile != self.ID else e.right_tile
+            for e in self.get_edges()]
+    return sorted(
+      len(self.topology.tiles[t].corners) if t is not None else 0
+      for t in neighbours)
 
 
   def get_corners(self) -> list[Vertex]:
@@ -177,10 +210,9 @@ class Tile:
 
   def set_shape_from_corners(self) -> None:
     """Set the shape attribute based on corners, and associated tile centre."""
-    self.shape = geom.Polygon([c.point for c in self.get_corners()])
-    c_shape = tiling_utils.get_clean_polygon(self.shape)
-    # would like to use incentre here, but it is not reliable enough...
-    self.centre = c_shape.centroid
+    self.geometry = geom.Polygon([c.geometry for c in self.get_corners()])
+    self.geometry = tiling_utils.get_clean_polygon(self.geometry)
+    self.set_centre()
 
 
   def set_corners_from_edges(self, update_shape: bool = True) -> None:
@@ -209,17 +241,9 @@ class Tile:
   def set_edge_directions(self) -> None:
     """Set up edges_CW attribute by inspection of the edges list.
 
-    It is (frankly!) hard to keep track of the correct sequence of CW/CCW order
-    of edges as new ones are created or old ones merged. This method inspects
-    the 'tail-head' relations between consecutive edges to set these flags
-    correctly.
-
-    New test is to check if the right tile of each edge is this one.
+    The test is to check if the right tile of each edge is this one.
     """
     self.edges_CW = [e.right_tile == self.ID for e in self.get_edges()]
-    # edge_IDs = self.edges
-    # self.edges_CW = [e1[-1] in e2 for e1, e2 in
-    #                  zip(edge_IDs, edge_IDs[1:] + edge_IDs[:1], strict = True)]
 
 
   def insert_vertex_at(
@@ -227,7 +251,7 @@ class Tile:
       v: Vertex,
       i: int,
       update_shape: bool = False,
-    ) -> None: # -> tuple[tuple[int, int], tuple[tuple[int, int],...]]:
+    ) -> None:
     """Insert the Vertex into tile at index position i.
 
     Both corners and edges attributes are updated, and the old edge IDs for
@@ -292,9 +316,15 @@ class Tile:
     i = self.corners.index(v)
     n = len(self.corners)
     return tiling_utils.get_inner_angle(
-      self.topology.points[self.corners[i-1]].point,
-      self.topology.points[self.corners[i]].point,
-      self.topology.points[self.corners[(i + 1) % n]].point)
+      self.topology.points[self.corners[i-1]].geometry,
+      self.topology.points[self.corners[i]].geometry,
+      self.topology.points[self.corners[(i + 1) % n]].geometry)
+
+
+  def set_centre(self) -> tuple[float]:
+    # sadly incentre is not reliable enough here
+    xy = self.geometry.centroid
+    self.centre = (xy.x, xy.y)
 
 
 class Vertex:
@@ -302,7 +332,7 @@ class Vertex:
 
   topology: Topology
   """the containing Topology object."""
-  point: geom.Point
+  geometry: geom.Point
   """point (geom.Point): point location of the vertex."""
   ID: int
   """integer (mostly but not necessarily in sequence) of vertex keyed into the
@@ -331,7 +361,7 @@ class Vertex:
       +---C   +---+
           |   |
           +---+"""
-
+  centre: tuple[float]
 
   def __init__(self, topology: Topology, point: geom.Point, ID: int) -> None:
     """Class constructor.
@@ -343,7 +373,8 @@ class Vertex:
 
     """
     self.topology = topology
-    self.point = point
+    self.geometry = point
+    self.set_centre()
     self.ID = ID
     self.tiles = []
     self.neighbours = []
@@ -357,7 +388,7 @@ class Vertex:
         str: string including ID, point and list of incident Tiles.
 
     """
-    return f"Vertex {self.ID} at {self.point} Tiles: {self.tiles}"
+    return f"Vertex {self.ID} at {self.geometry} Tiles: {self.tiles}"
 
 
   def __repr__(self) -> str:
@@ -419,7 +450,7 @@ class Vertex:
   def clockwise_order_incident_tiles(self) -> None:
     """Reorder tiles list clockwise (this is for dual tiling construction)."""
     cw_order = self._order_of_pts_cw_around_centre(
-      [t.centre for t in self.get_tiles()], self.point)
+      [t.centre for t in self.get_tiles()], self.centre)
     self.tiles = [self.tiles[i] for i in cw_order]
 
 
@@ -451,11 +482,15 @@ class Vertex:
       list[int]: list of indices of reordered points.
 
     """
-    dx = [p.x - centre.x for p in pts]
-    dy = [p.y - centre.y for p in pts]
+    dx = [p[0] - centre[0] for p in pts]
+    dy = [p[1] - centre[1] for p in pts]
     angles = [np.arctan2(dy, dx) for dx, dy in zip(dx, dy, strict = True)]
     d = dict(zip(angles, range(len(pts)), strict = True))
     return [i for angle, i in sorted(d.items(), reverse=True)]
+
+
+  def set_centre(self) -> tuple[float]:
+    self.centre = (self.geometry.x, self.geometry.y)
 
 
 class Edge:
@@ -484,6 +519,8 @@ class Edge:
   label: str = ""
   """the (lower case letter) label of the edge under the symmetries of the
   tiling."""
+  centre: tuple[float]
+  geometry: geom.LineString
 
   def __init__(self, topology:Topology, corners:list[int]) -> None:
     """Class constructor.
@@ -500,6 +537,8 @@ class Edge:
     self.topology = topology
     self.corners = tuple(c for c in corners)
     self.vertices = [self.corners[0], self.corners[-1]]
+    self.set_geometry()
+    self.set_centre()
     self.ID = len(self.topology.edges)
     self.element_type = "e"
 
@@ -511,7 +550,8 @@ class Edge:
       str: include ID and a list of corner vertex IDs.
 
     """
-    return f"Edge {self.ID} Corners: {self.corners}"
+    return " ".join([f"Edge {self.ID} Corners: {self.corners}", 
+                     f"Left|Right: {self.left_tile}|{self.right_tile}"])
 
 
   def __repr__(self) -> str:
@@ -519,7 +559,20 @@ class Edge:
 
 
   def _set_species(self) -> None:
-    self.species = len(self.corners)
+    angle = self.get_bearing()
+    v0, v1 = list(self.geometry.coords)
+    length = np.hypot(v1[0] - v0[0], v1[1] - v0[1])
+    line = affine.translate(
+      affine.rotate(self.geometry, -angle, v0), -v0[0], -v0[1])
+    scale = int(np.floor(np.log10(length)))
+    points1 = [(pt[0], pt[1]) for pt in line.coords]
+    points2 = [(length - pt[0], -pt[1]) for pt in points1[::-1]]
+    self.species = (
+      tuple([float(round(x, 6 - scale))
+             for x in itertools.chain.from_iterable(points1)][2:-1]),
+      tuple([float(round(x, 6 - scale))
+             for x in itertools.chain.from_iterable(points2)][2:-1]),
+    )
 
 
   def get_corners(self) -> list[Vertex]:
@@ -569,8 +622,8 @@ class Edge:
     return [self, new_edge]
 
 
-  def get_geometry(self, forward: bool = True) -> geom.LineString:
-    """Return geom.LineString representing geometry (including corners).
+  def set_geometry(self, forward: bool = True) -> geom.LineString:
+    """Set geom.LineString representing geometry (including corners).
 
     Args:
       forward (bool, optional): if True the returned LineString starts at
@@ -581,28 +634,16 @@ class Edge:
 
     """
     if forward:
-      return geom.LineString([v.point for v in self.get_corners()])
-    return geom.LineString([v.point for v in self.get_corners()[::-1]])
-
-
-  def get_topological_edge(self, forward: bool = True) -> geom.LineString:
-    """Return LineString connecting vertices of this edge.
-
-    Args:
-      forward (bool, optional): if True LineString starts at vertices[0],
-        else at vertices[1]. Defaults to True.
-
-    Returns:
-        geom.LineString: the required LineString.
-
-    """
-    if forward:
-      return geom.LineString([v.point for v in self.get_vertices()])
-    return geom.LineString([v.point for v in self.get_vertices()[::-1]])
+      self.geometry = geom.LineString([v.geometry for v in self.get_corners()])
+    self.geometry = geom.LineString([v.geometry for v in self.get_corners()[::-1]])
 
 
   def get_bearing(self) -> float:
     """Return bearing of edge from vertex to vertex in degrees."""
-    v0, v1 = tuple(v.point for v in self.get_vertices())
-    return np.degrees(np.arctan2(v1.y - v0.y, v1.x - v0.x))
+    v0, v1 = list(self.geometry.coords)
+    return np.degrees(np.arctan2(v1[1] - v0[1], v1[0] - v0[0]))
 
+
+  def set_centre(self) -> tuple[float]:
+    xy = self.geometry.interpolate(0.5, normalized = True)
+    self.centre = (xy.x, xy.y)

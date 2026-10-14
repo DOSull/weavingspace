@@ -49,7 +49,8 @@ def plot(
     show_edges: bool = True,
     offset_edges: bool = True,
     show_edge_labels: bool = False,
-    show_dual_tiles: bool = False,
+    # show_dual_tiles: bool = False,
+    ax: plt.Axes|None = None,
   ) -> plt.Axes:
   """Delegate plotting of requested elements and return plt.Axes.
 
@@ -76,9 +77,10 @@ def plot(
     plt.Axes: a plot of the Topology as requested.
 
   """
-  fig = plt.figure(figsize = (10, 10))
-  ax = fig.add_axes(111)
-  extent = gpd.GeoSeries([t.shape for t in topo.tiles]).total_bounds
+  if ax is None:
+    fig = plt.figure(figsize = (8, 8))
+    ax = fig.add_subplot(111)
+  extent = gpd.GeoSeries([t.geometry for t in topo.tiles.values()]).total_bounds
   dist = max([extent[2] - extent[0], extent[3] - extent[1]]) / 100
   if show_original_tiles:
     _plot_tiles(topo, ax)
@@ -88,9 +90,9 @@ def plot(
     _plot_vertex_labels(topo, ax, show_vertex_ids)
   if show_edge_labels or show_edges:
     _plot_edges(topo, ax, show_edges, show_edge_labels, dist, offset_edges)
-  if show_dual_tiles:
-    _plot_dual_tiles(topo, ax, dist)
-  plt.axis("off")
+  # if show_dual_tiles:
+  #   _plot_dual_tiles(topo, ax, dist)
+  ax.set_axis_off()
   return ax
 
 
@@ -113,7 +115,7 @@ def _plot_tiles(topo: Topology, ax: plt.Axes) -> plt.Axes:
 
 
 def _plot_tile_centres(topo: Topology, ax: plt.Axes) -> plt.Axes:
-  """Print tile transitivity class at each tile centroid.
+  """Print tile label at each tile centroid.
 
   Args:
     topo (Topology): the Topology to plot.
@@ -123,8 +125,8 @@ def _plot_tile_centres(topo: Topology, ax: plt.Axes) -> plt.Axes:
     plt.Axes: the Axes.
 
   """
-  for tile in topo.tiles:
-    ax.annotate(tile.transitivity_class, xy = (tile.centre.x, tile.centre.y),
+  for tile in topo.tiles.values():
+    ax.annotate(tile.label, xy = tile.centre,
                 ha = "center", va = "center", fontsize = "x-large")
   return ax
 
@@ -147,8 +149,8 @@ def _plot_vertex_labels(
 
   """
   for v in topo.points.values():
-    ax.annotate(v.ID if show_vertex_ids else v.label,
-                xy = (v.point.x, v.point.y), color = "k",
+    ax.annotate(v.ID if show_vertex_ids else v.transitivity_class,
+                xy = v.centre, color = "k",
                 ha = "center", va = "center", fontsize = "x-large")
   return ax
 
@@ -190,18 +192,17 @@ def _plot_edges(
     edges = topo._get_edge_geoms().geometry
   if show_edge_labels:
     for ls, e in zip(edges, topo.edges.values(), strict = True):
-      c = ls.interpolate(0.5, normalized = True)
-      ax.annotate(e.label, xy = (c.x, c.y), color = "k",
+      ax.annotate(e.transitivity_class, xy = e.centre, color = "k",
                   ha = "center", va = "center", fontsize = "x-large")
   return ax
 
 
-def _plot_dual_tiles(
-    topo: Topology,
-    ax: plt.Axes,
-    dist: float = 0.0,
-  ) -> plt.Axes:
-  gpd.GeoSeries(topo.dual_tiles).buffer(
-    -dist / 4, join_style = "mitre", cap_style = "square").plot(
-      ax = ax, fc = "g", alpha = 0.25)
-  return ax
+# def _plot_dual_tiles(
+#     topo: Topology,
+#     ax: plt.Axes,
+#     dist: float = 0.0,
+#   ) -> plt.Axes:
+#   gpd.GeoSeries(topo.dual_tiles).buffer(
+#     -dist / 4, join_style = "mitre", cap_style = "square").plot(
+#       ax = ax, fc = "g", alpha = 0.25)
+#   return ax

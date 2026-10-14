@@ -178,23 +178,23 @@ class Transform:
       return (
         f"{self.transform_type:<11}{self.angle:>6.1f}° "
         f"POINT ({self.centre.x:6.1f} {self.centre.y:6.1f}) "
-        f"{tuple([float(np.round(x, 3)) for x in self.transform])}"
+        f"{tuple([float(round(x, 3)) for x in self.transform])}"
       )
     if self.transform_type == "translation":
       return (
         f"{self.transform_type:<11}{'':>14}"
         f"({self.translation[0]:>6.1f},{self.translation[0]:>6.1f}) "
-        f"{tuple([float(np.round(x, 3)) for x in self.transform])}"
+        f"{tuple([float(round(x, 3)) for x in self.transform])}"
       )
     if self.transform_type == "reflection":
       return (
         f"{self.transform_type:<11}{self.angle:>6.1f}° "
         f"POINT ({self.centre.x:6.1f} {self.centre.y:6.1f}) "
-        f"{tuple([float(np.round(x, 3)) for x in self.transform])}"
+        f"{tuple([float(round(x, 3)) for x in self.transform])}"
       )
     return (
       f"{self.transform_type:<11}{'':>30}"
-      f"{tuple([float(np.round(x, 3)) for x in self.transform])}"
+      f"{tuple([float(round(x, 3)) for x in self.transform])}"
     )
 
 
@@ -439,8 +439,8 @@ class Symmetries:
 
     """
     # get edge lengths and angles
-    lengths = [float(round(l, 5)) for l in tiling_utils.get_side_lengths(polygon)]
-    raw_angles = [float(round(a, 4)) for a in tiling_utils.get_interior_angles(polygon)]
+    lengths = tiling_utils.get_side_lengths(polygon)
+    raw_angles = tiling_utils.get_interior_angles(polygon)
     if mirrored:
       lengths_r = lengths[::-1]
       angles_r = raw_angles[::-1]
