@@ -96,7 +96,6 @@ labels = \
     list(string.ascii_lowercase),
     list(string.ascii_lowercase))]
 
-
 class CheckPoint(NamedTuple):
   """Convenience wrapper for checkpoint data."""
 

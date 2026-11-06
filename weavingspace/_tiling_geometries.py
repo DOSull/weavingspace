@@ -1638,32 +1638,11 @@ def _setup_chavey(unit:TileUnit) -> str|None:
   """
   if any(k not in unit.__dict__ for k in ["code"]):
     return "Chavey tilings require a letter code to be be supplied."
-  match unit.code:
-    case "a":
-      _setup_chavey_a(unit)
-    case "b":
-      _setup_chavey_b(unit)
-    case "c":
-      _setup_chavey_c(unit)
-    case "d":
-      _setup_chavey_d(unit)
-    case "e":
-      _setup_chavey_e(unit)
-    case "f":
-      _setup_chavey_f(unit)
-    case "g":
-      _setup_chavey_g(unit)
-    case "h":
-      _setup_chavey_h(unit)
-    case "i":
-      _setup_chavey_i(unit)
-    case "j":
-      _setup_chavey_j(unit)
-    case "k":
-      _setup_chavey_k(unit)
-    case _:
-      unit.base_shape = TileShape.HEXAGON
-      return "No valid Chavey tiling code supplied."
+  if unit.code in "abcdefghijklmnopqrs":
+    globals()[f"_setup_chavey_{unit.code}"](unit)
+  else:
+    unit.base_shape = TileShape.HEXAGON
+    return "No valid Chavey tiling code supplied."
   return None
 
 
@@ -1965,4 +1944,197 @@ def _setup_chavey_k(unit:TileUnit) -> None:
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:len(polys)]},
     crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_l(unit:TileUnit) -> None:
+  h = unit.spacing
+  t = h / 2
+  hexagon = tiling_utils.get_regular_polygon(h, 6)
+  tri = tiling_utils.get_regular_polygon(t, 3)
+  tri1 = affine.translate(tri, h * SQRT3/3, -2 * t / 3)
+  tri2 = affine.rotate(tri1, 60, origin = (0, 0))
+  polys = [hexagon, tri1, tri2]
+  unit.setup_vectors((h * 2 / SQRT3, 0), (0, h))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": list("abc")}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_m(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  t = h / 2
+  s = h / SQRT3
+  dodecagon = tiling_utils.get_regular_polygon(d, 12)
+  sq = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, -d/2 - s/2)
+  squares = [affine.rotate(sq, a, (0, 0)) for a in (-180, -120, -60, 60, 120)]
+  squares.append(affine.translate(sq, -2 * t - s, 0))
+  # hex = affine.translate(tiling_utils.get_regular_polygon(h, 6), 0, -d/2 - h/2)
+  # hexes = [affine.rotate(hex, a, (0, 0)) for a in (-30, 30, 90)]
+  tri = affine.translate(
+    tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
+  tri_hex = [affine.rotate(tri, a, (0, d/2 + t))
+             for a in (60, 0, -60)]
+  tris1 = []
+  for a in range(30, 360, 60):
+    tris1.extend([affine.rotate(t, a, (0, 0)) for t in tri_hex])
+  tris1[8:9] = [affine.rotate(tri, 180, (-s/2 - t, -d/2 - s/2))
+                for tri in tris1[8:9]]
+  tris1[9:10] = [affine.rotate(tri, 180, (s/2 + t, -d/2 - s/2))
+                 for tri in tris1[9:10]]
+  tri = affine.translate(tri, 0, s)
+  tris2 = [affine.rotate(tri, a, (0, 0)) for a in (60, 120)]
+  polys = [dodecagon, *squares, *tris1, *tris2]
+  # polys = [affine.translate(p, 0, s/2) for p in polys]
+  unit.setup_vectors((d + 2 * t, 0), (0, d + s))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:27]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_n(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  t = h / 2
+  s = h / SQRT3
+  dodecagon = tiling_utils.get_regular_polygon(d, 12)
+  sq = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, -d/2 - s/2)
+  squares = [affine.rotate(sq, a, (0, 0)) for a in (-120, -60, 0, 60, 120)]
+  squares.append(affine.translate(sq, -2 * t - s, 0))
+  hex = affine.translate(tiling_utils.get_regular_polygon(h, 6), 0, -d/2 - h/2)
+  hexes = [affine.rotate(hex, a, (0, 0)) for a in (-90, -30, 30)]
+  tri = affine.translate(
+    tiling_utils.get_regular_polygon(t, 3), 0, s + d/2 + t/3)
+  tris = [affine.rotate(tri, a, (0, 0)) for a in (60, 120)]
+  polys = [dodecagon, *squares, *hexes, *tris]
+  polys = [affine.translate(p, s/2, s/2) for p in polys]
+  unit.setup_vectors((d + 2 * t, 0), (0, d + s))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:12]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_o(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  t = h / 2
+  s = h / SQRT3
+  dodecagon = tiling_utils.get_regular_polygon(d, 12)
+  sq = affine.translate(tiling_utils.get_regular_polygon(s, 4), -d/2, d/2)
+  tri = affine.translate(
+    tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
+  tris = [affine.rotate(tri, a, (0, 0)) for a in (30, 60, 210, 240)]
+  polys = [dodecagon, sq, *tris]
+  polys = [affine.rotate(p, -45, (0, 0)) for p in polys]
+  unit.setup_vectors((d / SQRT2, d / SQRT2), (d / SQRT2, -d / SQRT2))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:6]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_p(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  t = h / 2
+  s = h / SQRT3
+  hex = tiling_utils.get_regular_polygon(h, 6)
+  sq = tiling_utils.get_regular_polygon(s, 4)
+  sq1 = affine.translate(sq, 0, h/2 + s/2)
+  squares = [affine.rotate(sq1, a, (0, 0)) for a in range(0, 360, 60)]
+  squares.append(affine.translate(sq, -d/2, d/2))
+  tri = tiling_utils.get_regular_polygon(t, 3)
+  tri1 = affine.translate(tri, 0, h/2 + t/3)
+  tri1 = affine.rotate(tri1, 90, (-s/2, h/2))
+  tris = [affine.rotate(tri1, a, (0, 0)) for a in range(0, 360, 60)]
+  tri2 = affine.translate(tri, 0, d/2 + t/3)
+  tris.extend([affine.rotate(tri2, a, (0, 0)) for a in (30, 60, 210, 240)])
+  polys = [hex, *squares, *tris]
+  polys = [affine.rotate(p, -45, (0, 0)) for p in polys]
+  unit.setup_vectors((d / SQRT2, d / SQRT2), (d / SQRT2, -d / SQRT2))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:18]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_q(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  t = h / 2
+  s = h / SQRT3
+  hex = tiling_utils.get_regular_polygon(h, 6)
+  sq = tiling_utils.get_regular_polygon(s, 4)
+  sq1 = affine.translate(sq, 0, t + s/2)
+  squares = [affine.rotate(sq1, a, (0, 0)) for a in range(0, 360, 60)]
+  squares.append(affine.translate(sq, -d/2, d/2))
+  tri = tiling_utils.get_regular_polygon(t, 3)
+  tri1 = affine.translate(tri, 0, h/2 + t/3)
+  tri1 = affine.rotate(tri1, 90, (-s/2, h/2))
+  tris = [affine.rotate(tri1, a, (0, 0)) for a in range(0, 360, 60)]
+  tri2 = affine.translate(tri, 0, d/2 + t/3)
+  tris.extend([affine.rotate(tri2, a, (0, 0)) for a in (30, 60, 210, 240)])
+  polys = [hex, *squares, *tris]
+  polys2 = list(polys)
+  polys2[:7] = [affine.rotate(p, 30, (0, 0)) for p in polys2[:7]]
+  polys2[8:14] = [affine.rotate(p, 30, (0, 0)) for p in polys2[8:14]]
+  polys.extend([affine.translate(p, 0, d) for p in polys2])
+  # polys = [affine.rotate(p, -45, (0, 0)) for p in polys]
+  unit.setup_vectors((d, 0), (0, 2 * d))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:36]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_r(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  t = h / 2
+  s = h / SQRT3
+  dodecagon = tiling_utils.get_regular_polygon(d, 12)
+  sq = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, d/2 + s/2)
+  tri = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
+  tri1 = affine.rotate(tri, 150, (-s/2, d/2)) 
+  tri2 = affine.rotate(tri, 90, (-s/2, d/2))
+  tri3 = affine.rotate(tri, -90, (s/2, d/2))
+  tri4 = affine.rotate(tri, -150, (s/2, d/2))
+  polys = [tri1, tri2, sq, tri3, tri4]
+  for a in (-120, -240):
+    polys.extend([affine.rotate(p, a, (0, 0)) for p in polys[:5]])
+  polys = [dodecagon, *polys]
+  unit.setup_vectors((d + t - s/2, d/2 + s/2), (d + t - s/2, -d/2 - s/2))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:16]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_s(unit:TileUnit) -> None:
+  s = unit.spacing / 5
+  t = s * SQRT3 / 2
+  sq = tiling_utils.get_regular_polygon(s, 4)
+  squares = [affine.translate(sq, -s, 0), sq, affine.translate(sq, s, 0)]
+  squares.extend(affine.rotate(x,  60, (-3*s/2 - t, 0)) for x in squares[:2])
+  squares.extend(affine.rotate(x, -60, (-3*s/2 - t, 0)) for x in squares[:2])
+  squares.extend(affine.rotate(x, -60, ( 3*s/2 + t, 0)) for x in squares[1:3])
+  squares.extend(affine.rotate(x,  60, ( 3*s/2 + t, 0)) for x in squares[1:3])
+  squares.append(affine.translate(sq, 0, s + 2*t))
+  tri = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, s/2 + t/3)
+  tris = [affine.translate(tri, dx, 0) for dx in (-s, 0, s)]
+  tri_hex = [affine.rotate(tris[1], a, (0, s/2 + t))
+             for a in (0, -60, -120, 180, 120, 60)]
+  tris[1:2] = tri_hex
+  tris.extend([affine.rotate(tr, 180, (0, 0)) for tr in tris])
+  tris.append(affine.rotate(affine.translate(tri, -s, 0), 150, (-3*s/2, s/2)))
+  tris.append(affine.rotate(tris[-1], 60, (-3*s/2, s/2)))
+  tris.append(affine.rotate(tris[-1], 60, (-3*s/2, -s/2)))
+  tris.extend([affine.rotate(tr, 180, (0, 0)) for tr in tris[-3:]])
+  tris.extend([affine.rotate(tr, -150, (-3*s/2 - t, -s)) for tr in tris[-6:-3]])
+  tris.extend([affine.rotate(tr,  150, (-3*s/2 - t,  s)) for tr in tris[-9:-6]])
+  tris.append(affine.rotate(tris[-1], 150, (-s/2 - t, s + 2*t)))
+  tris.append(affine.rotate(tris[-1], 180, (0, s + 2*t)))
+  tris.append(affine.rotate(tris[-1], 150, (s/2 + t, s + 2*t)))
+  tris.append(affine.rotate(tris[-1], 180, (s + t, 0)))
+  polys = [*squares, *tris]
+  unit.setup_vectors((0, 2*s + 4*t), (3*s + 2*t, 0))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:44]}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
