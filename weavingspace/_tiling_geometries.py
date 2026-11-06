@@ -2026,8 +2026,7 @@ def _setup_chavey_o(unit:TileUnit) -> None:
     tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
   tris = [affine.rotate(tri, a, (0, 0)) for a in (30, 60, 210, 240)]
   polys = [dodecagon, sq, *tris]
-  polys = [affine.rotate(p, -45, (0, 0)) for p in polys]
-  unit.setup_vectors((d / SQRT2, d / SQRT2), (d / SQRT2, -d / SQRT2))
+  unit.setup_vectors((0, d), (d, 0))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": TILE_IDS[:6]}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
@@ -2050,8 +2049,7 @@ def _setup_chavey_p(unit:TileUnit) -> None:
   tri2 = affine.translate(tri, 0, d/2 + t/3)
   tris.extend([affine.rotate(tri2, a, (0, 0)) for a in (30, 60, 210, 240)])
   polys = [hex, *squares, *tris]
-  polys = [affine.rotate(p, -45, (0, 0)) for p in polys]
-  unit.setup_vectors((d / SQRT2, d / SQRT2), (d / SQRT2, -d / SQRT2))
+  unit.setup_vectors((0, d), (d, 0))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": TILE_IDS[:18]}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
@@ -2073,12 +2071,13 @@ def _setup_chavey_q(unit:TileUnit) -> None:
   tris = [affine.rotate(tri1, a, (0, 0)) for a in range(0, 360, 60)]
   tri2 = affine.translate(tri, 0, d/2 + t/3)
   tris.extend([affine.rotate(tri2, a, (0, 0)) for a in (30, 60, 210, 240)])
+  tris[-1] = affine.translate(tris[-1], -d, 0)
   polys = [hex, *squares, *tris]
   polys2 = list(polys)
   polys2[:7] = [affine.rotate(p, 30, (0, 0)) for p in polys2[:7]]
   polys2[8:14] = [affine.rotate(p, 30, (0, 0)) for p in polys2[8:14]]
   polys.extend([affine.translate(p, 0, d) for p in polys2])
-  # polys = [affine.rotate(p, -45, (0, 0)) for p in polys]
+  polys = [affine.translate(p, s/4, -d/2) for p in polys]
   unit.setup_vectors((d, 0), (0, 2 * d))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": TILE_IDS[:36]}, crs = unit.crs,
@@ -2101,7 +2100,8 @@ def _setup_chavey_r(unit:TileUnit) -> None:
   for a in (-120, -240):
     polys.extend([affine.rotate(p, a, (0, 0)) for p in polys[:5]])
   polys = [dodecagon, *polys]
-  unit.setup_vectors((d + t - s/2, d/2 + s/2), (d + t - s/2, -d/2 - s/2))
+  unit.setup_vectors(
+    (0, d + s), (d + t - s/2, d/2 + s/2), (d + t - s/2, -d/2 - s/2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": TILE_IDS[:16]}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
@@ -2187,7 +2187,8 @@ def _setup_chavey_u(unit:TileUnit) -> None:
   tris.append(affine.rotate(tris[-1], -60, (d/2 + s, -s/2)))
   tris.append(affine.rotate(tris[-1], 150, (d/2 + s + t, -s)))
   polys = [dodecagon, *squares, *tris]
-  unit.setup_vectors((-s - t, d + s/2), (d + s/2, s + t))
+  polys = [affine.rotate(p, -30, (0, 0)) for p in polys]
+  unit.setup_vectors((s/2, d + t), (d + t, -s/2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": TILE_IDS[:18]}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
