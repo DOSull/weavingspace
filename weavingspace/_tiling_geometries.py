@@ -1638,7 +1638,7 @@ def _setup_chavey(unit:TileUnit) -> str|None:
   """
   if any(k not in unit.__dict__ for k in ["code"]):
     return "Chavey tilings require a letter code to be be supplied."
-  if unit.code in "abcdefghijklmnopqrs":
+  if unit.code in "abcdefghijklmnopqrstu":
     globals()[f"_setup_chavey_{unit.code}"](unit)
   else:
     unit.base_shape = TileShape.HEXAGON
@@ -2137,4 +2137,57 @@ def _setup_chavey_s(unit:TileUnit) -> None:
   unit.setup_vectors((0, 2*s + 4*t), (3*s + 2*t, 0))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": TILE_IDS[:44]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_t(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  t = h / 2
+  s = h / SQRT3
+  dodecagon = tiling_utils.get_regular_polygon(d, 12)
+  sq1 = affine.translate(tiling_utils.get_regular_polygon(s, 4), -s - t, d/2)
+  sq2 = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, d/2 + s/2)
+  squares = [sq1, sq2]
+  squares.extend([affine.rotate(sq, -90, (0, 0)) for sq in squares])
+  squares.extend([affine.rotate(squares[0], a, (0, 0)) for a in (-180, -270)])
+  tri = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
+  tris = [affine.rotate(tri, a, (0, 0)) for a in (60, 30)]
+  for a in (-90, -180, -270):
+    tris.extend([affine.rotate(tr, a, (0, 0)) for tr in tris[:2]])
+  tris.append(affine.rotate(tris[1], 180, (-s/2 - t/2, d/2 + s/4)))
+  tris.append(affine.rotate(tris[-1], 180, (0, d/2 + s/2)))
+  tris.extend([affine.rotate(tr, -90, (0, 0)) for tr in tris[-2:]])
+  polys = [dodecagon, *squares, *tris]
+  unit.setup_vectors((0, d + s), (d + s, 0))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:19]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_chavey_u(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  t = h / 2
+  s = h / SQRT3
+  dodecagon = tiling_utils.get_regular_polygon(d, 12)
+  sq1 = affine.translate(tiling_utils.get_regular_polygon(s, 4), -s - t, d/2)
+  sq2 = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, d/2 + s/2)
+  squares = [sq1, sq2]
+  squares.extend([affine.rotate(sq, -90, (0, 0)) for sq in squares])
+  squares.append(affine.rotate(squares[-1], 150, (d/2 + s, -s/2)))
+  tri = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
+  tris = [affine.rotate(tri, a, (0, 0)) for a in (60, 30)]
+  tris.extend([affine.rotate(tr, -90, (0, 0)) for tr in tris])
+  tris.append(affine.rotate(tris[0], 180, (0, 0)))
+  tris.append(affine.rotate(tris[1], 180, (-s/2 - t/2, d/2 + s/4)))
+  tris.append(affine.rotate(tris[-1], 180, (0, d/2 + s/2)))
+  tris.extend([affine.rotate(tr, -90, (0, 0)) for tr in tris[-2:]])
+  tris.append(affine.rotate(tris[-1], -150, (d/2 + s, -s/2)))
+  tris.append(affine.rotate(tris[-1], -60, (d/2 + s, -s/2)))
+  tris.append(affine.rotate(tris[-1], 150, (d/2 + s + t, -s)))
+  polys = [dodecagon, *squares, *tris]
+  unit.setup_vectors((-s - t, d + s/2), (d + s/2, s + t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:18]}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
