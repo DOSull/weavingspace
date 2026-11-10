@@ -5,12 +5,15 @@ weavingspace/__init__.py
 weavingspace/_loom.py
 weavingspace/_tiling_geometries.py
 weavingspace/_weave_grid.py
+weavingspace/elements.py
+weavingspace/molecules.py
 weavingspace/symmetry.py
 weavingspace/tile_map.py
 weavingspace/tile_unit.py
 weavingspace/tileable.py
 weavingspace/tiling_utils.py
 weavingspace/topology.py
+weavingspace/topology_plot.py
 weavingspace/weave_matrices.py
 weavingspace/weave_unit.py
 weavingspace.egg-info/PKG-INFO

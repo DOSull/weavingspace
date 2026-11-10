@@ -2192,3 +2192,402 @@ def _setup_chavey_u(unit:TileUnit) -> None:
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": TILE_IDS[:18]}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2_uniform(unit:TileUnit) -> str|None:
+  """Return a 2-uniform tiling."""
+  if any(k not in unit.__dict__ for k in ["id"]):
+    return "2-uniform tilings require an id number from 1 to 20 be supplied."
+  if unit.id in range(1, 21):
+    globals()[f"_setup_2u_{unit.id}"](unit)
+  else:
+    unit.base_shape = TileShape.HEXAGON
+    return "No valid 2-uniform id supplied."
+  return None
+
+
+def _setup_2u_1(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  dodecagon = tiling_utils.get_regular_polygon(d, 12)
+  hexagon = affine.rotate(tiling_utils.get_regular_polygon(h, 6), 30, (0, 0))
+  hexagon = affine.translate(hexagon, 0, d/2 + 2*s + t)
+  hexagons = [hexagon, *[affine.translate(hexagon, dx, -3*s/2 - t)
+                         for dx in (-s/2 - h/2, s/2 + h/2)]]
+  square = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, -d/2 - s/2)
+  squares = [affine.rotate(square, a, (0, 0)) for a in (0, -120, -180, -240)]
+  squares.append(affine.rotate(squares[-2], 150,  (-s/2, d/2 + s)))
+  squares.append(affine.rotate(squares[-3], -150, ( s/2, d/2 + s)))
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, d/2 + s + t/3)
+  triangles = [affine.rotate(triangle, a, (0, 0)) for a in (0, 180)]
+  polys = [dodecagon, *hexagons, *squares, *triangles]
+  unit.setup_vectors((-d/2 - t,  d/2 + 2*s + t),
+                     ( d/2 + t,  d/2 + 2*s + t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:12]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_2(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  dodecagon = tiling_utils.get_regular_polygon(d, 12)
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
+  triangles = [affine.rotate(triangle, a, (0, 0)) for a in (0, -30, -180, -210)]
+  square = affine.translate(tiling_utils.get_regular_polygon(s, 4), s/2, d/2 + s/2 + t)
+  square = affine.rotate(square, -60, (0, d/2 + t))
+  polys = [dodecagon, *triangles, square]
+  unit.setup_vectors((s/2 + t,  d + s/2 + t),
+                     ( d/2 + t + s/2, d/2),
+                     ( d/2, -d/2 - s/2 - t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:6]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_3(unit:TileUnit) -> None:
+  s = unit.spacing / 3
+  t = s * SQRT3 / 2
+  squares = [affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, dy)
+             for dy in (-s, 0, s)]
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, 3*s/2 + t/3)
+  triangles = [triangle, affine.rotate(triangle, 180, (0, 0))]
+  polys = [*squares, *triangles]
+  unit.setup_vectors((s/2, 3*s + t), (s, 0), (s/2, -3*s - t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:5]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_4(unit:TileUnit) -> None:
+  s = unit.spacing / 2
+  t = s * SQRT3 / 2
+  squares = [affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, dy)
+             for dy in (-s/2, s/2)]
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, s + t/3)
+  triangles = [triangle, affine.rotate(triangle, 180, (0, 0))]
+  polys = [*squares, *triangles]
+  unit.setup_vectors((s/2, 2*s + t), (s, 0), (s/2, -2*s - t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:4]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_5(unit:TileUnit) -> None:
+  h = unit.spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  polys = _get_dissected_dodecagon(unit.spacing)
+  hexagon = affine.translate(polys[0], 0, h + s)
+  polys.extend([affine.rotate(hexagon, a, (0, 0)) for a in (-30, 30)])
+  square = affine.translate(polys[1], 0, s)
+  polys.extend([affine.rotate(square, a, (0, 0)) for a in (-60, 0, 60)])
+  unit.setup_vectors((0, h + 3*s),
+                     (h + 3*s/2 + t,  3*s/2 + t),
+                     (h + 3*s/2 + t, -3*s/2 - t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:18]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_6(unit:TileUnit) -> None:
+  h = unit.spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  hexagon = affine.translate(tiling_utils.get_regular_polygon(h, 6), -s, 0)
+  square = affine.translate(tiling_utils.get_regular_polygon(s, 4), s/2, s/2)
+  squares = [affine.rotate(square, a, (0, 0)) for a in [30, -60]]
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, -2*t/3)
+  triangles = [affine.rotate(triangle, a, (-s, 0)) for a in (0, 180)]
+  polys = [hexagon, *squares, *triangles]
+  polys = [affine.rotate(p, -30, (0, 0)) for p in polys]
+  unit.setup_vectors((0, 2*s), (s + h , s), (s + h, -s))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:5]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_7(unit:TileUnit) -> None:
+  h = unit.spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  hexagon = affine.translate(tiling_utils.get_regular_polygon(h, 6), -s, 0)
+  square = affine.translate(tiling_utils.get_regular_polygon(s, 4), s/2, s/2)
+  squares = [affine.rotate(square, a, (0, 0)) for a in [30, -60]]
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, -2*t/3)
+  triangles = [affine.rotate(triangle, a, (-s, 0)) for a in (0, 180)]
+  polys = [hexagon, *squares, *triangles]
+  polys = [affine.rotate(p, -30, (0, 0)) for p in polys]
+  unit.setup_vectors((0, 2*s), (s + h, 0))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:5]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_8(unit:TileUnit) -> None:
+  h = unit.spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  polys = _get_dissected_dodecagon(unit.spacing)
+  polys.append(affine.translate(polys[11], -h - 2*s, 0))
+  polys.append(affine.translate(polys[8], h + 2*s, 0))
+  unit.setup_vectors((0, h + 2*s), (h + 3*s/2, s + t), (h + 3*s/2, -s - t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:15]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_9(unit:TileUnit) -> None:
+  h = unit.spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  polys = _get_dissected_dodecagon(unit.spacing)
+  polys.append(affine.translate(polys[11], -h - 2*s, 0))
+  polys.append(affine.translate(polys[8], h + 2*s, 0))
+  polys[-2:] = [affine.rotate(p, 30, (0, 0)) for p in polys[-2:]]
+  unit.setup_vectors((s + t, h + 3*s/2), (h + 2*s, 0), (s + t, -h - 3*s/2))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:15]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_10(unit:TileUnit) -> None:
+  h = unit.spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  hexagon = tiling_utils.get_regular_polygon(h, 6)
+  hexagons = [affine.translate(hexagon, 0, dy) for dy in (t, -t)]
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, h + t/3)
+  triangles = [affine.rotate(triangle, a, (0, t)) for a in (0, 120, 240)]
+  triangles.extend([affine.rotate(tr, 180, (0, 0)) for tr in triangles])
+  polys = [*hexagons, *triangles]
+  unit.setup_vectors((3*s/2, 3*t), (3*s/2, -3*t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:8]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_11(unit:TileUnit) -> None:
+  h = unit.spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  hexagon = tiling_utils.get_regular_polygon(h, 6)
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, 4*t/3)
+  triangles = [affine.rotate(triangle, a, (0, 0)) for a in (0, 180)]
+  polys = [hexagon, *triangles]
+  polys = [affine.rotate(p, 30, (0, 0)) for p in polys]
+  unit.setup_vectors((0, 2*s), (h, 0))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:3]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_12(unit:TileUnit) -> None:
+  h = unit.spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  hexagon = tiling_utils.get_regular_polygon(h, 6)
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, 4*t/3)
+  triangles = [affine.rotate(triangle, a, (0, 0)) for a in (0, 60)]
+  triangles.append(affine.rotate(triangles[-2], 180, (-s/4, 3*t/2)))
+  triangles.append(affine.rotate(triangles[-2], 180, (-s, t)))
+  polys = [hexagon, *triangles]
+  polys = [affine.rotate(p, 60, (0, 0)) for p in polys]
+  unit.setup_vectors((0, h), (5*s/2, t), (5*s/2, -t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:5]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_13(unit:TileUnit) -> None:
+  d = unit.spacing
+  h = d * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  dodecagon = tiling_utils.get_regular_polygon(d, 12)
+  square = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, d/2 + s/2)
+  squares = [affine.rotate(square, a, (0, 0)) for a in (-60, 0, 60)]
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
+  triple = [triangle, 
+            affine.rotate(triangle, 180, ( s/4, d/2 + t/2)),
+            affine.rotate(triangle, 180, (-s/4, d/2 + t/2))]
+  triangles = []
+  for a in range(0, 360, 60):
+    triangles.extend([affine.rotate(tr, a, (0, 0)) for tr in triple])
+  triangles = [affine.rotate(tr, -30, (0, 0)) for tr in triangles]
+  triangles = [triangles[i] for i in [0,1,2,3,4,5,6,7,9,12,15,17]]
+  polys = [dodecagon, *squares, *triangles]
+  unit.setup_vectors((0, d + s),
+                     (s/2 + 2*t + d/2,  d/2 + s/2),
+                     (s/2 + 2*t + d/2, -d/2 - s/2))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:16]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_14(unit:TileUnit) -> None:
+  s = unit.spacing
+  t = s * SQRT3 / 2
+  square = tiling_utils.get_regular_polygon(s, 4)
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, s/2 + t/3)
+  triangles = [triangle, affine.rotate(triangle, -60, (0, s/2 + t))]
+  triangles.extend([affine.rotate(tr, 180, (0, 0)) for tr in triangles])
+  polys = [square, *triangles]
+  unit.setup_vectors((0, s + 2*t), (s, 0))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:5]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_15(unit:TileUnit) -> None:
+  s = unit.spacing
+  t = s * SQRT3 / 2
+  square = tiling_utils.get_regular_polygon(s, 4)
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, s/2 + t/3)
+  triangles = [triangle, *[affine.rotate(triangle, a, (0, s/2 + t))
+                           for a in (-60, -120)]]
+  triangles.extend([affine.rotate(tr, 180, (0, 0)) for tr in triangles])
+  polys = [square, *triangles]
+  unit.setup_vectors((s/2, s + 3*t), (s, 0), (s/2, -s - 3*t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:7]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_16(unit:TileUnit) -> None:
+  s = unit.spacing / 4
+  t = s * SQRT3 / 2
+  square = tiling_utils.get_regular_polygon(s, 4)
+  squares = [affine.translate(square, 0, dy) for dy in (-s/2, -3*s/2)]
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, t/3)
+  triangle = affine.rotate(triangle,  90, (0, -s/2))
+  triangles = [triangle,
+               affine.rotate(triangle,  60, (-s/2, -s)),
+               affine.rotate(triangle, 120, (-s/2, -s))]
+  triangles.extend([affine.rotate(tr, 180, (0, -s)) for tr in triangles])
+  polys = [*squares, *triangles]
+  polys2 = [affine.rotate(p, 90, (0, -s)) for p in polys]
+  polys.extend([affine.translate(p, 0, 3*s/2 + t) for p in polys2])
+  polys.append(affine.rotate(polys[0], -150, (-s/2, 0)))
+  polys.append(affine.rotate(polys[0],  150, ( s/2, 0)))
+  unit.setup_vectors((3*s/2 + t, 3*s/2 + t),
+                     (3*s/2 + t, -3*s/2 - t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:18]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_17(unit:TileUnit) -> None:
+  s = unit.spacing / 4
+  t = s * SQRT3 / 2
+  square = tiling_utils.get_regular_polygon(s, 4)
+  squares = [affine.translate(square, dx, -s/2) for dx in (-s/2, -3*s/2)]
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), -s/2, t/3)
+  triangles = [affine.translate(triangle, dx, 0) for dx in (0, -s)]
+  triangles.extend([affine.rotate(tr, 180, (-3*s/4, t/2)) for tr in triangles])
+  polys = [*squares, *triangles]
+  polys2 = [affine.scale(p, -1, 1, origin = (-s, 0)) for p in polys]
+  polys.extend([affine.rotate(p, 150, (0, 0)) for p in polys2])
+  unit.setup_vectors((s/2, s + t), (2*s + 2*t, -s))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:12]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_18(unit:TileUnit) -> None:
+  h = unit.spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  polys = _get_dissected_dodecagon_2(unit.spacing)
+  polys.append(affine.translate(polys[10], -h - 2*s, 0))
+  polys.append(affine.translate(polys[7], h + 2*s, 0))
+  polys[-2:] = [affine.rotate(p, 30, (0, 0)) for p in polys[-2:]]
+  unit.setup_vectors((s + t, h + 3*s/2), (h + 2*s, 0), (s + t, -h - 3*s/2))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:20]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_19(unit:TileUnit) -> None:
+  h = unit.spacing / 2
+  s = h / SQRT3
+  t = h / 2
+  hexagon = tiling_utils.get_regular_polygon(h, 6)
+  triangles = [affine.translate(tr, 0, h) for tr in _get_dissected_hexagon(h)]
+  triangles.append(affine.translate(triangles[0], 0, h))
+  triangles.append(affine.translate(triangles[3], 0, -2*h))
+  triangles.extend([affine.translate(tr, s/2, -t) for tr in triangles[1:3]])
+  triangles.extend([affine.translate(tr, -s/2, -t) for tr in triangles[4:6]])
+  polys = [hexagon, *triangles]
+  polys = [affine.translate(p, 0, -t) for p in polys]
+  unit.setup_vectors((3*s/2, 3*t), (3*s/2, -3*t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:13]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _setup_2u_20(unit:TileUnit) -> None:
+  h = unit.spacing / 2
+  s = h / SQRT3
+  t = h / 2
+  polys = _get_dissected_hexagon_2(unit.spacing)
+  polys.append(affine.translate(polys[2], 2*s, 0))
+  polys.append(affine.translate(polys[11], -2*s, 0))
+  unit.setup_vectors((s, 2*h), (7*s/2, t), (5*s/2, -3*t))
+  unit.tiles = gpd.GeoDataFrame(
+    data = {"tile_id": TILE_IDS[:len(polys)]}, crs = unit.crs,
+    geometry = gpd.GeoSeries(polys))
+
+
+def _get_dissected_dodecagon(spacing:float, mode:int = 0) -> list[geom.Polygon]:
+  h = spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  hexagon = tiling_utils.get_regular_polygon(h, 6)
+  square = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, s/2 + t)
+  squares = [affine.rotate(square, a, (0, 0)) for a in range(0, 360, 60)]
+  triangle = affine.rotate(tiling_utils.get_regular_polygon(t, 3), 180, (0, 0))
+  triangle = affine.translate(triangle, 0, s + 2*t/3)
+  triangles = [affine.rotate(triangle, a, (0, 0)) for a in range(30, 360, 60)]
+  dissection = [hexagon, *squares, *triangles]
+  return (dissection if mode == 0 else 
+          [affine.rotate(p, 30, (0, 0)) for p in dissection])
+
+
+def _get_dissected_dodecagon_2(spacing:float, mode:int = 0) -> list[geom.Polygon]:
+  h = spacing * SQRT3 / (2 + SQRT3)
+  s = h / SQRT3
+  t = h / 2
+  square = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, s/2 + t)
+  squares = [affine.rotate(square, a, (0, 0)) for a in range(0, 360, 60)]
+  triangles = _get_dissected_hexagon(h)
+  tri = affine.rotate(tiling_utils.get_regular_polygon(t, 3), 180, (0, 0))
+  tri = affine.translate(tri, 0, s + 2*t/3)
+  triangles.extend([affine.rotate(tri, a, (0, 0)) for a in range(30, 360, 60)])
+  dissection = [*triangles, *squares]
+  return (dissection if mode == 0 else 
+          [affine.rotate(p, 30, (0, 0)) for p in dissection])
+
+
+def _get_dissected_hexagon(spacing:float) -> list[geom.Polygon]:
+  t = spacing / 2
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, -2*t/3)
+  return [affine.rotate(triangle, a, (0, 0)) for a in range(0, 360, 60)]
+
+
+def _get_dissected_hexagon_2(spacing:float) -> list[geom.Polygon]:
+  h = spacing / 2
+  t = h / 2
+  s = t * 2 / SQRT3
+  hexagon = tiling_utils.get_regular_polygon(h, 6)
+  triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, 4*t/3)
+  three_tris = [triangle, affine.rotate(triangle, 180, (-s/4, 3*t/2)),
+                affine.translate(triangle, -s, 0)]
+  triangles = []
+  for a in range(0, 360, 60):
+    triangles.extend([affine.rotate(tr, a, (0, 0)) for tr in three_tris])
+  return [hexagon, *triangles]

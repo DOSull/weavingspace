@@ -5,6 +5,7 @@ from .tiling_utils import *
 from ._loom import *
 from ._weave_grid import *
 from .tileable import *
+from .molecules import *
 from ._tiling_geometries import *
 from .tile_unit import *
 from .weave_matrices import *

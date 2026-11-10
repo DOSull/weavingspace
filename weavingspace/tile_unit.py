@@ -166,6 +166,8 @@ class TileUnit(Tileable):
         return geometries._setup_star_polygon_2(self)
       case x if "chavey" in x:
         return geometries._setup_chavey(self)
+      case x if "2u" in x:
+        return geometries._setup_2_uniform(self)
       case x if "cross" in x:
         return geometries._setup_crosses(self)
       case _:
