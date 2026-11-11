@@ -52,12 +52,19 @@ Examples:
   + "cairo" the Cairo tiling more formally known as the Laves
   [3<sup>2</sup>.4.3.4] tiling. The author's favourite tiling, hence it has its
   own tiling_type.
-  + "hex-slice" a range of dissections of the regular hexagon into, 2, 3, 4, 6,
-  or 12 'pie slices'. The number of slices is set by specifying an additional
-  argument `n`. Slices are cut either starting at the corners of  the hexagon
-  or from the midpoints of hexagon edges, by specifying an additional argument
-  `offset` set to either 0 or 1 respectively.
-  + "hex-dissection" a range of 4, 7 or 9-fold dissections of the hexagon.
+  + "hex-slice"  and "square-slice" are pie slices of hexes or squares into any
+  number of 'pie slices'. The number of slices is set by an argument `n`. Slices
+  are equally spaced along the perimeter - starting from a position specified by
+  `offset`, which is fraction of the distance 1/2n around the perimeter.
+  + "square-dissection" 3, 5 or 9-fold dissections of the square.
+  + "hex-dissection" 4, 7 or 9-fold dissections of the hexagon.
+  + "hex-colouring" or "square-colouring" colourings of the regular hexagonal
+  and square tilings of 2 to 16, 19, or 37 colours (hexes), from 2 to 9, 16, or
+  25 colours (squares; note that the "grid" tiling may also be used). The number
+  of colours is specified by argument `n`.
+  + "grid" a `nrows` by `ncols` grid of squares, with the number of squares used
+  specified by `n` - this allows gaps to be left in the final map which may help
+  with identifying which cell represents which data attribute.
   + "laves" a range of isohedral tilings. See
   https://en.wikipedia.org/wiki/List_of_Euclidean_uniform_tilings.
   The desired tiling is specified by the additional argument `code` which is a
@@ -67,13 +74,8 @@ Examples:
   Many of these are the dual tilings of the Laves tilings. The desired tiling
   is specified by the additional argument `code` which is a string like
   "3.3.4.3.4". Not all the possible Archimedean tilings are implemented.
-  + "hex-colouring" or "square-colouring" colourings of the regular hexagonal
-  and square tilings of between 2 and 10 colours, as specified by the argument
-  `n`.
-  + "hex-slice" or "square-slice" dissections of the regular hexagonal and
-  square tilings of between 2 and 12 colours, as specified by the arguments `n`
-  and `offset`.
-  + "crosses" colourings of cross-shaped pentominoes of between
+  + "stripes" any number `n` of vertical strips of a base square shaped tile.
+  + "crosses" colourings of between 2 and 7 cross-shaped pentominoes of squares.
 
   Spacing and coordinate reference of the tile unit are specified by the
   `weavingspace.tileable.Tileable` superclass variables
@@ -94,8 +96,8 @@ Examples:
   To create custom tilings start from one of the base tiles above, and
   explicitly set the `weavingspace.tileable.Tileable.tiles` variable
   by geometric construction of suitable shapely.geometry.Polygons.
-  TODO: A detailed example of this usage can be found here ....
-
+  For an example of how this is done, see the code for the Cairo tiling in
+  `weavingspace._tiling_geometries._setup_cairo()`.
 """
 
 @dataclass
@@ -108,13 +110,6 @@ class TileUnit(Tileable):
 
   tiling_type:str = ""
   """tiling type as detailed in the class documentation preamble."""
-  offset:float = 1
-  """offset for 'dissection' and 'slice' tilings. Defaults to 1."""
-  n:int = 3
-  """number of dissections or colours in 'hex-dissection', 'hex-slice' and
-  'hex-colouring' tilings. Defaults to 3."""
-  code:str = "3.3.4.3.4"
-  """the code for 'laves' or 'archimedean' tiling types."""
 
   def __init__(self, **kwargs: str) -> None:
     """Delegate construction to superclass."""
