@@ -39,6 +39,14 @@ from shapely import line_interpolate_point
 
 from weavingspace import TileShape, tiling_utils
 
+TILE_IDS = [
+  *string.ascii_lowercase,
+  *["".join(x) for x in itertools.product(
+    string.ascii_lowercase, string.ascii_lowercase)]
+]
+R2 = 2 ** 0.5
+R3 = 3 ** 0.5
+
 """Functions for setting up a TileUnit with various tile geometries.
 
 Some care is required in adding new functions that use existing ones to get the
@@ -66,13 +74,7 @@ Kaplan C S, 2009 _Introductory Tiling Theory for Computer Graphics_ (Morgan &
 Claypool)
 """
 
-SQRT2 = np.sqrt(2)
-SQRT3 = np.sqrt(3)
-TILE_IDS = [
-  *string.ascii_lowercase,
-  *["".join(x) for x in itertools.product(
-    string.ascii_lowercase, string.ascii_lowercase)]
-]
+# TILE_IDS = tiling_utils.TILE_IDS
 
 def _setup_base_tiling(unit:TileUnit) -> str|None:
   """Set up hexagonal, square, diamond, or triangular tileable unit.
@@ -94,8 +96,8 @@ def _setup_base_tiling(unit:TileUnit) -> str|None:
       tri1 = affine.translate(tri1, 0, -tri1.bounds[1])
       tri2 = affine.rotate(tri1, 180, (0, 0))
       polys = [tri1, tri2]
-      unit.setup_vectors((unit.spacing / SQRT3,  unit.spacing),
-                         (unit.spacing / SQRT3, -unit.spacing))
+      unit.setup_vectors((unit.spacing / R3,  unit.spacing),
+                         (unit.spacing / R3, -unit.spacing))
     case TileShape.DIAMOND:
       half_tile = tiling_utils.get_regular_polygon(unit.spacing, 3)
       half_tile = affine.translate(half_tile, 0, -half_tile.bounds[1])
@@ -103,13 +105,13 @@ def _setup_base_tiling(unit:TileUnit) -> str|None:
       coords = [(p.x, p.y) for p in corners]
       polys = [geom.Polygon([coords[0], coords[1], coords[2],
                              (coords[1][0], -coords[1][1])])]
-      unit.setup_vectors((unit.spacing / SQRT3,  unit.spacing),
-                         (unit.spacing / SQRT3, -unit.spacing))
+      unit.setup_vectors((unit.spacing / R3,  unit.spacing),
+                         (unit.spacing / R3, -unit.spacing))
     case TileShape.HEXAGON:
       polys = [tiling_utils.get_regular_polygon(unit.spacing, 6)]
       unit.setup_vectors((0,  unit.spacing),
-                         (unit.spacing * SQRT3 / 2,  unit.spacing / 2),
-                         (unit.spacing * SQRT3 / 2, -unit.spacing / 2))
+                         (unit.spacing * R3 / 2,  unit.spacing / 2),
+                         (unit.spacing * R3 / 2, -unit.spacing / 2))
     case _:
       return "No proper TileShape provided to base tile unit constructor."
   unit.tiles = gpd.GeoDataFrame(
@@ -159,8 +161,8 @@ def _setup_cairo(unit:TileUnit) -> str|None:
   #
   # then rotate -15 and make 4 copies at 90 degree rotations
   p1 = geom.Polygon([(x, 0), (0, 0), (0, x),
-                     (x * SQRT3/2, x + x/2),
-                     (x * (1 + SQRT3) / 2, x * (3 - SQRT3) / 2)])
+                     (x * R3/2, x + x/2),
+                     (x * (1 + R3) / 2, x * (3 - R3) / 2)])
   p1 = affine.rotate(p1, -15, (0, 0))
   p2 = affine.rotate(p1,  90, (0, 0))
   p3 = affine.rotate(p1, 180, (0, 0))
@@ -176,8 +178,8 @@ def _setup_cairo(unit:TileUnit) -> str|None:
     data = {"tile_id": list("abcd")}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
   # SET THE TRANSLATION VECTORS
-  unit.setup_vectors((unit.spacing / SQRT2,  unit.spacing/SQRT2),
-                     (unit.spacing / SQRT2, -unit.spacing/SQRT2))
+  unit.setup_vectors((unit.spacing / R2,  unit.spacing/R2),
+                     (unit.spacing / R2, -unit.spacing/R2))
   return None
 
 
@@ -211,8 +213,8 @@ def _setup_hex_slice(unit:TileUnit) -> str|None:
     crs = unit.crs,
     geometry = gpd.GeoSeries(slices))
   unit.setup_vectors((                       0,  unit.spacing    ),
-                     (unit.spacing * SQRT3 / 2,  unit.spacing / 2),
-                     (unit.spacing * SQRT3 / 2, -unit.spacing / 2))
+                     (unit.spacing * R3 / 2,  unit.spacing / 2),
+                     (unit.spacing * R3 / 2, -unit.spacing / 2))
   return None
 
 def _setup_square_slice(unit:TileUnit) -> str|None:
@@ -460,13 +462,13 @@ def _setup_laves_3_3_3_3_6(unit:TileUnit) -> None:
   # now replace first and last points by (0, 0)
   # (note shapely doesn't require closure of the polygon)
   petal = geom.Polygon([(0, 0)] + hex_p[1:5])
-  offset_a = np.degrees(np.arctan(1 / 3 / SQRT3))
+  offset_a = np.degrees(np.arctan(1 / 3 / R3))
   petals = [
     affine.rotate(petal, a + offset_a, origin = (0, 0))
     for a in range(30, 360, 60)]
   unit.setup_vectors((                     0,  unit.spacing    ),
-                     (unit.spacing * SQRT3/2,  unit.spacing / 2),
-                     (unit.spacing * SQRT3/2, -unit.spacing / 2))
+                     (unit.spacing * R3/2,  unit.spacing / 2),
+                     (unit.spacing * R3/2, -unit.spacing / 2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list("abcdef")},
     crs = unit.crs,
@@ -486,19 +488,19 @@ def _setup_laves_3_3_3_4_4(unit:TileUnit) -> None:
   x = unit.spacing / np.sqrt(2)
   tile1 = geom.Polygon([
     ( x/2,  0),
-    ( x/2,  x * (0.5 + SQRT3/6)),
-    (   0,  x * (0.5 + SQRT3/3)),
-    (-x/2,  x * (0.5 + SQRT3/6)),
+    ( x/2,  x * (0.5 + R3/6)),
+    (   0,  x * (0.5 + R3/3)),
+    (-x/2,  x * (0.5 + R3/6)),
     (-x/2,  0),
   ])
   tile2 = geom.Polygon([
     (-x/2,  0),
-    (-x/2, -x * (0.5 + SQRT3/6)),
-    (   0, -x * (0.5 + SQRT3/3)),
-    ( x/2, -x * (0.5 + SQRT3/6)),
+    (-x/2, -x * (0.5 + R3/6)),
+    (   0, -x * (0.5 + R3/3)),
+    ( x/2, -x * (0.5 + R3/6)),
     ( x/2,  0),
   ])
-  unit.setup_vectors((x, 0), (x / 2, x * (1 + SQRT3 / 2)))
+  unit.setup_vectors((x, 0), (x / 2, x * (1 + R3 / 2)))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list("ab")},
     crs = unit.crs,
@@ -523,8 +525,8 @@ def _setup_laves_3_12_12(unit:TileUnit) -> None:
   # reorder so the 'inner' and 'outer' triangles are labelled alternately
   tris = itertools.chain(*zip(tris1, tris2, strict = True))
   unit.setup_vectors((                     0,  unit.spacing    ),
-                     (unit.spacing * SQRT3/2,  unit.spacing / 2),
-                     (unit.spacing * SQRT3/2, -unit.spacing / 2))
+                     (unit.spacing * R3/2,  unit.spacing / 2),
+                     (unit.spacing * R3/2, -unit.spacing / 2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list("abcdef")}, crs = unit.crs,
     geometry = gpd.GeoSeries(tris))
@@ -616,8 +618,8 @@ def _setup_archimedean_3_3_3_3_6(unit:TileUnit) -> None:
 
 def _setup_archimedean_3_3_3_4_4(unit:TileUnit) -> None:
   """Set up (3.3.3.4.4)."""
-  s = unit.spacing / np.sqrt(1 + SQRT3)
-  t = s * SQRT3/2
+  s = unit.spacing / np.sqrt(1 + R3)
+  t = s * R3/2
   square = tiling_utils.get_regular_polygon(s, 4)
   tri = tiling_utils.get_regular_polygon(t, 3)
   tri_up = affine.translate(tri, 0, -tri.bounds[1] + s/2)
@@ -632,7 +634,7 @@ def _setup_archimedean_3_3_3_4_4(unit:TileUnit) -> None:
 def _setup_archimedean_3_3_4_3_4(unit:TileUnit) -> None:
   """Set up (3.3.4.3.4)."""
   s = unit.spacing/2/np.cos(np.pi/12)
-  t = s * SQRT3/2
+  t = s * R3/2
   square = tiling_utils.get_regular_polygon(s, 4)
   tri = tiling_utils.get_regular_polygon(t, 3)
   tri1 = affine.translate(tri, 0, -tri.bounds[3])
@@ -652,8 +654,8 @@ def _setup_archimedean_3_3_4_3_4(unit:TileUnit) -> None:
 
 def _setup_archimedean_3_4_6_4(unit:TileUnit) -> None:
   """Set up (3.4.6.4)."""
-  h = unit.spacing / (1 + SQRT3) * SQRT3
-  s = h / SQRT3
+  h = unit.spacing / (1 + R3) * R3
+  s = h / R3
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   square = tiling_utils.get_regular_polygon(s, 4)
@@ -674,7 +676,7 @@ def _setup_archimedean_3_4_6_4(unit:TileUnit) -> None:
 
 def _setup_archimedean_3_6_3_6(unit:TileUnit) -> None:
   """Set up (3.6.3.6)."""
-  h = unit.spacing * SQRT3/2
+  h = unit.spacing * R3/2
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   tri = tiling_utils.get_regular_polygon(t, 3)
@@ -682,7 +684,7 @@ def _setup_archimedean_3_6_3_6(unit:TileUnit) -> None:
   tri2 = affine.rotate(tri, 180)
   tri2 = affine.translate(tri2, 0, -t - tri.bounds[3])
   polys = [hexagon, tri1, tri2]
-  unit.setup_vectors((t*2/SQRT3,  h), (t*2/SQRT3, -h))
+  unit.setup_vectors((t*2/R3,  h), (t*2/R3, -h))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list("abc")}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
@@ -691,14 +693,14 @@ def _setup_archimedean_3_6_3_6(unit:TileUnit) -> None:
 def _setup_archimedean_3_12_12(unit:TileUnit) -> None:
   """Set up (3.12.12)."""
   d = unit.spacing
-  t = d * SQRT3/2 / (2 + SQRT3)
+  t = d * R3/2 / (2 + R3)
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   tri = tiling_utils.get_regular_polygon(t, 3)
   tri = affine.translate(tri, 0, unit.spacing / 2 - tri.bounds[1])
   tri_1 = affine.rotate(tri,  30, origin = (0, 0))
   tri_2 = affine.rotate(tri, -30, origin = (0, 0))
   polys = [dodecagon, tri_1, tri_2]
-  unit.setup_vectors((0, d), (d * SQRT3/2,  d/2), (d * SQRT3/2, -d/2))
+  unit.setup_vectors((0, d), (d * R3/2,  d/2), (d * R3/2, -d/2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list("abc")}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
@@ -706,9 +708,9 @@ def _setup_archimedean_3_12_12(unit:TileUnit) -> None:
 
 def _setup_archimedean_4_6_12(unit:TileUnit) -> None:
   """Set up (4.6.12)."""
-  d = unit.spacing * (2 + SQRT3) / (3 + SQRT3)
-  s = d / (2 + SQRT3)
-  h = s * SQRT3
+  d = unit.spacing * (2 + R3) / (3 + R3)
+  s = d / (2 + R3)
+  h = s * R3
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   square = tiling_utils.get_regular_polygon(s, 4)
@@ -720,8 +722,8 @@ def _setup_archimedean_4_6_12(unit:TileUnit) -> None:
   hex2 = affine.rotate(hex1, -60, origin = (0, 0))
   polys = [dodecagon, sq2, hex1, sq1, hex2, sq3]
   unit.setup_vectors((                0,   d + s     ),
-                     ((d + s) * SQRT3/2,  (d + s) / 2),
-                     ((d + s) * SQRT3/2, -(d + s) / 2))
+                     ((d + s) * R3/2,  (d + s) / 2),
+                     ((d + s) * R3/2, -(d + s) / 2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list("abcdef")}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
@@ -730,7 +732,7 @@ def _setup_archimedean_4_6_12(unit:TileUnit) -> None:
 def _setup_archimedean_4_8_8(unit:TileUnit) -> None:
   """Set up (4.8.8)."""
   o = unit.spacing
-  s = o / (1 + SQRT2)
+  s = o / (1 + R2)
   octagon = tiling_utils.get_regular_polygon(o, 8)
   square = tiling_utils.get_regular_polygon(s, 4)
   square = affine.translate(square, 0, (o + s) / 2)
@@ -1239,8 +1241,8 @@ def _setup_hex_dissection(unit:TileUnit) -> str|None:
       unit.base_shape = TileShape.HEXAGON
       return f"{unit.n} dissection of hexagon not available"
   unit.setup_vectors((0, unit.spacing),
-                     (unit.spacing * SQRT3/2, unit.spacing / 2),
-                     (unit.spacing * SQRT3/2, -unit.spacing / 2))
+                     (unit.spacing * R3/2, unit.spacing / 2),
+                     (unit.spacing * R3/2, -unit.spacing / 2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:unit.n]},
     crs = unit.crs,
@@ -1497,7 +1499,7 @@ def _setup_star_polys_464(unit:TileUnit) -> None:
 def _setup_star_polys_466(unit:TileUnit) -> None:
   """Set up 4-star and two hexagon tiling."""
   hex1 = tiling_utils.get_regular_polygon(
-    unit.spacing / np.sqrt(1 + SQRT3 / 2), 6)
+    unit.spacing / np.sqrt(1 + R3 / 2), 6)
   hex2 = affine.scale(hex1, 0.5, 0.5)
   hex1 = affine.rotate(hex1, 30)
   w1 = hex1.bounds[2] - hex1.bounds[0]
@@ -1648,8 +1650,8 @@ def _setup_chavey(unit:TileUnit) -> str|None:
 
 def _setup_chavey_a(unit:TileUnit) -> None:
   """Set up 3.3.3.4.4;3.3.4.3.4;4.4.4.4."""
-  s = unit.spacing / np.sqrt(5 + 2 * SQRT3)
-  t = s * SQRT3 / 2
+  s = unit.spacing / np.sqrt(5 + 2 * R3)
+  t = s * R3 / 2
   sq = tiling_utils.get_regular_polygon(s, 4)
   squares = [affine.translate(sq, dx/2, dy/2) for dx in [-s, s]
                                               for dy in [-s, s]]
@@ -1661,8 +1663,8 @@ def _setup_chavey_a(unit:TileUnit) -> None:
                     for tr in triangles])
   triangles.extend([affine.rotate(tr, 90, (0, 0)) for tr in triangles])
   triangles = [affine.rotate(tr, 90, (0, 0)) for tr in triangles]
-  polys = [affine.translate(p, s / SQRT2 * np.cos(np.pi/12),
-                               s / SQRT2 * np.sin(np.pi/12))
+  polys = [affine.translate(p, s / R2 * np.cos(np.pi/12),
+                               s / R2 * np.sin(np.pi/12))
                             for p in squares + triangles]
   unit.setup_vectors((s/2, 2 * s + t), (2 * s + t, -s/2))
   unit.tiles = gpd.GeoDataFrame(
@@ -1673,8 +1675,8 @@ def _setup_chavey_a(unit:TileUnit) -> None:
 
 def _setup_chavey_b(unit:TileUnit) -> None:
   """Set up 3.4.4.6;3.4.6.4;4.4.4.4."""
-  h = unit.spacing * SQRT3 / (1 + SQRT3) / SQRT2
-  s = h / SQRT3
+  h = unit.spacing * R3 / (1 + R3) / R2
+  s = h / R3
   t = h / 2
   hexes_and_tris = [tiling_utils.get_regular_polygon(h, 6)]
   hexes_and_tris.append(geom.Polygon([(-s/2, -t), (s/2, -t), (0, -2*t)]))
@@ -1699,8 +1701,8 @@ def _setup_chavey_b(unit:TileUnit) -> None:
 
 def _setup_chavey_c(unit:TileUnit) -> None:
   """Set up 3.4.4.6;3.4.6.4."""
-  h = unit.spacing * SQRT3 / (3 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (3 + R3)
+  s = h / R3
   t = h / 2
   hexes, squares, triangles = [], [], []
   squares.append(tiling_utils.get_regular_polygon(s, 4))
@@ -1734,8 +1736,8 @@ def _setup_chavey_c(unit:TileUnit) -> None:
 
 def _setup_chavey_d(unit:TileUnit) -> None:
   """Set up 3.3.3.4.4;3.3.4.3.4."""
-  s = unit.spacing * SQRT2 / (3 + SQRT3)
-  t = s * SQRT3 / 2
+  s = unit.spacing * R2 / (3 + R3)
+  t = s * R3 / 2
   squares, triangles = [], []
   squares.append(tiling_utils.get_regular_polygon(s, 4))
   squares.append(affine.translate(squares[0],    0 , -s))
@@ -1755,8 +1757,8 @@ def _setup_chavey_d(unit:TileUnit) -> None:
   triangles.extend([affine.rotate(triangles[4], a, ( s, t + s/2))
                     for a in ( 150,  210)])
   polys = [affine.translate(p, 0, -t) for p in squares + triangles]
-  unit.setup_vectors((unit.spacing / SQRT2,  unit.spacing / SQRT2),
-                     (unit.spacing / SQRT2, -unit.spacing / SQRT2))
+  unit.setup_vectors((unit.spacing / R2,  unit.spacing / R2),
+                     (unit.spacing / R2, -unit.spacing / R2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:len(polys)]},
     crs = unit.crs,
@@ -1765,8 +1767,8 @@ def _setup_chavey_d(unit:TileUnit) -> None:
 
 def _setup_chavey_e(unit:TileUnit) -> None:
   """Set up 3.3.3.3.3.3;3.3.4.3.4."""
-  s = unit.spacing / (1 + SQRT3)
-  t = s * SQRT3 / 2
+  s = unit.spacing / (1 + R3)
+  t = s * R3 / 2
   squares, triangles = [], []
   triangles.append(geom.Polygon([(0, 0), (s/2, -t), (-s/2, -t)]))
   triangles.extend([affine.rotate(triangles[0], a, (0, 0))
@@ -1783,8 +1785,8 @@ def _setup_chavey_e(unit:TileUnit) -> None:
   squares.append(affine.rotate(squares[0], -60, (0, 0)))
   polys = [affine.translate(p, 0, 0) for p in squares + triangles]
   unit.setup_vectors((0, unit.spacing),
-                     (unit.spacing * SQRT3/2, unit.spacing / 2),
-                     (unit.spacing * SQRT3/2, -unit.spacing / 2))
+                     (unit.spacing * R3/2, unit.spacing / 2),
+                     (unit.spacing * R3/2, -unit.spacing / 2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:len(polys)]},
     crs = unit.crs,
@@ -1793,8 +1795,8 @@ def _setup_chavey_e(unit:TileUnit) -> None:
 
 def _setup_chavey_f(unit:TileUnit) -> None:
   """Set up 3.3.3.3.3.3;3.3.3.3.6."""
-  h = unit.spacing * SQRT3 / np.sqrt(7)
-  s = h / SQRT3
+  h = unit.spacing * R3 / np.sqrt(7)
+  s = h / R3
   t = h / 2
   hexes, triangles = [], []
   hexes.append(tiling_utils.get_regular_polygon(h, 6))
@@ -1817,7 +1819,7 @@ def _setup_chavey_f(unit:TileUnit) -> None:
 def _setup_chavey_g(unit:TileUnit) -> None:
   """Set up 3.3.3.3.3.3;3.3.3.3.6 (another one)."""
   h = unit.spacing / 2
-  s = h / SQRT3
+  s = h / R3
   t = h / 2
   hexes, triangles = [], []
   hexes.append(tiling_utils.get_regular_polygon(h, 6))
@@ -1837,8 +1839,8 @@ def _setup_chavey_g(unit:TileUnit) -> None:
 
 def _setup_chavey_h(unit:TileUnit) -> None:
   """Set up 3.3.4.3.4;3.4.6.4."""
-  h = unit.spacing / (1 + 2 / SQRT3)
-  s = h / SQRT3
+  h = unit.spacing / (1 + 2 / R3)
+  s = h / R3
   t = h / 2
   hexes, squares, triangles = [], [], []
   hexes.append(tiling_utils.get_regular_polygon(h, 6))
@@ -1854,9 +1856,9 @@ def _setup_chavey_h(unit:TileUnit) -> None:
                      [(s/2, s + t), (s/2 + t, 3*s/2 + t), (s/2 + t, s/2 + t)]))
   triangles.append(affine.rotate(triangles[-1], 180, (0, 0)))
   polys = [affine.rotate(p, 30, (0, 0)) for p in polys + triangles]
-  unit.setup_vectors(( unit.spacing / 2, unit.spacing * SQRT3/2),
+  unit.setup_vectors(( unit.spacing / 2, unit.spacing * R3/2),
                      ( unit.spacing    , 0),
-                     (-unit.spacing / 2, unit.spacing * SQRT3/2))
+                     (-unit.spacing / 2, unit.spacing * R3/2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:len(polys)]},
     crs = unit.crs,
@@ -1865,8 +1867,8 @@ def _setup_chavey_h(unit:TileUnit) -> None:
 
 def _setup_chavey_i(unit:TileUnit) -> None:
   """Set up 3.3.3.3.3.3;3.3.4.3.4."""
-  h = unit.spacing / (1 + 2 / SQRT3)
-  s = h / SQRT3
+  h = unit.spacing / (1 + 2 / R3)
+  s = h / R3
   t = h / 2
   triangles1, squares, triangles2 = [], [], []
   hex_c = tiling_utils.get_corners(tiling_utils.get_regular_polygon(h, 6))
@@ -1885,9 +1887,9 @@ def _setup_chavey_i(unit:TileUnit) -> None:
                                   (s/2 + t,   s/2 + t)]))
   triangles2.append(affine.rotate(triangles2[-1], 180, (0, 0)))
   polys = [affine.rotate(p, 30, (0, 0)) for p in polys + triangles2]
-  unit.setup_vectors(( unit.spacing / 2, unit.spacing * SQRT3/2),
+  unit.setup_vectors(( unit.spacing / 2, unit.spacing * R3/2),
                      ( unit.spacing    , 0),
-                     (-unit.spacing / 2, unit.spacing * SQRT3/2))
+                     (-unit.spacing / 2, unit.spacing * R3/2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:len(polys)]},
     crs = unit.crs,
@@ -1895,8 +1897,8 @@ def _setup_chavey_i(unit:TileUnit) -> None:
 
 
 def _setup_chavey_j(unit:TileUnit) -> None:
-  h = unit.spacing / (1 + 2 / SQRT3)
-  s = h / SQRT3
+  h = unit.spacing / (1 + 2 / R3)
+  s = h / R3
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   sq = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, (s + h)/2)
@@ -1907,9 +1909,9 @@ def _setup_chavey_j(unit:TileUnit) -> None:
   triangles.append(affine.translate(triangles[0], -s - t, -h - 3*s/2))
   polys = [affine.rotate(p, 30, (0, 0))
            for p in [hexagon, *squares, *triangles]]
-  unit.setup_vectors(( unit.spacing / 2, unit.spacing * SQRT3/2),
+  unit.setup_vectors(( unit.spacing / 2, unit.spacing * R3/2),
                      ( unit.spacing    , 0),
-                     (-unit.spacing / 2, unit.spacing * SQRT3/2))
+                     (-unit.spacing / 2, unit.spacing * R3/2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:len(polys)]},
     crs = unit.crs,
@@ -1917,8 +1919,8 @@ def _setup_chavey_j(unit:TileUnit) -> None:
 
 
 def _setup_chavey_k(unit:TileUnit) -> None:
-  h = unit.spacing / (1 + 2 / SQRT3)
-  s = h / SQRT3
+  h = unit.spacing / (1 + 2 / R3)
+  s = h / R3
   t = h / 2
   triangles1, squares, triangles2 = [], [], []
   hex_c = tiling_utils.get_corners(tiling_utils.get_regular_polygon(h, 6))
@@ -1938,9 +1940,9 @@ def _setup_chavey_k(unit:TileUnit) -> None:
   triangles2.append(affine.rotate(triangles2[-1], 180, (0, 0)))
   polys = polys + triangles2
   polys[-2:] = [affine.rotate(p, 30, (0, 0)) for p in polys[-2:]]
-  unit.setup_vectors(( unit.spacing / 2, unit.spacing * SQRT3/2),
+  unit.setup_vectors(( unit.spacing / 2, unit.spacing * R3/2),
                      ( unit.spacing    , 0),
-                     (-unit.spacing / 2, unit.spacing * SQRT3/2))
+                     (-unit.spacing / 2, unit.spacing * R3/2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:len(polys)]},
     crs = unit.crs,
@@ -1952,10 +1954,10 @@ def _setup_chavey_l(unit:TileUnit) -> None:
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   tri = tiling_utils.get_regular_polygon(t, 3)
-  tri1 = affine.translate(tri, h * SQRT3/3, -2 * t / 3)
+  tri1 = affine.translate(tri, h * R3/3, -2 * t / 3)
   tri2 = affine.rotate(tri1, 60, origin = (0, 0))
   polys = [hexagon, tri1, tri2]
-  unit.setup_vectors((h * 2 / SQRT3, 0), (0, h))
+  unit.setup_vectors((h * 2 / R3, 0), (0, h))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list("abc")}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
@@ -1963,9 +1965,9 @@ def _setup_chavey_l(unit:TileUnit) -> None:
 
 def _setup_chavey_m(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
+  h = d * R3 / (2 + R3)
   t = h / 2
-  s = h / SQRT3
+  s = h / R3
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   sq = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, -d/2 - s/2)
   squares = [affine.rotate(sq, a, (0, 0)) for a in (-180, -120, -60, 60, 120)]
@@ -1995,9 +1997,9 @@ def _setup_chavey_m(unit:TileUnit) -> None:
 
 def _setup_chavey_n(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
+  h = d * R3 / (2 + R3)
   t = h / 2
-  s = h / SQRT3
+  s = h / R3
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   sq = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, -d/2 - s/2)
   squares = [affine.rotate(sq, a, (0, 0)) for a in (-120, -60, 0, 60, 120)]
@@ -2017,9 +2019,9 @@ def _setup_chavey_n(unit:TileUnit) -> None:
 
 def _setup_chavey_o(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
+  h = d * R3 / (2 + R3)
   t = h / 2
-  s = h / SQRT3
+  s = h / R3
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   sq = affine.translate(tiling_utils.get_regular_polygon(s, 4), -d/2, d/2)
   tri = affine.translate(
@@ -2034,9 +2036,9 @@ def _setup_chavey_o(unit:TileUnit) -> None:
 
 def _setup_chavey_p(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
+  h = d * R3 / (2 + R3)
   t = h / 2
-  s = h / SQRT3
+  s = h / R3
   hex = tiling_utils.get_regular_polygon(h, 6)
   sq = tiling_utils.get_regular_polygon(s, 4)
   sq1 = affine.translate(sq, 0, h/2 + s/2)
@@ -2057,9 +2059,9 @@ def _setup_chavey_p(unit:TileUnit) -> None:
 
 def _setup_chavey_q(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
+  h = d * R3 / (2 + R3)
   t = h / 2
-  s = h / SQRT3
+  s = h / R3
   hex = tiling_utils.get_regular_polygon(h, 6)
   sq = tiling_utils.get_regular_polygon(s, 4)
   sq1 = affine.translate(sq, 0, t + s/2)
@@ -2086,9 +2088,9 @@ def _setup_chavey_q(unit:TileUnit) -> None:
 
 def _setup_chavey_r(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
+  h = d * R3 / (2 + R3)
   t = h / 2
-  s = h / SQRT3
+  s = h / R3
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   sq = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, d/2 + s/2)
   tri = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
@@ -2109,7 +2111,7 @@ def _setup_chavey_r(unit:TileUnit) -> None:
 
 def _setup_chavey_s(unit:TileUnit) -> None:
   s = unit.spacing / 5
-  t = s * SQRT3 / 2
+  t = s * R3 / 2
   sq = tiling_utils.get_regular_polygon(s, 4)
   squares = [affine.translate(sq, -s, 0), sq, affine.translate(sq, s, 0)]
   squares.extend(affine.rotate(x,  60, (-3*s/2 - t, 0)) for x in squares[:2])
@@ -2142,9 +2144,9 @@ def _setup_chavey_s(unit:TileUnit) -> None:
 
 def _setup_chavey_t(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
+  h = d * R3 / (2 + R3)
   t = h / 2
-  s = h / SQRT3
+  s = h / R3
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   sq1 = affine.translate(tiling_utils.get_regular_polygon(s, 4), -s - t, d/2)
   sq2 = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, d/2 + s/2)
@@ -2167,9 +2169,9 @@ def _setup_chavey_t(unit:TileUnit) -> None:
 
 def _setup_chavey_u(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
+  h = d * R3 / (2 + R3)
   t = h / 2
-  s = h / SQRT3
+  s = h / R3
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   sq1 = affine.translate(tiling_utils.get_regular_polygon(s, 4), -s - t, d/2)
   sq2 = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, d/2 + s/2)
@@ -2208,8 +2210,8 @@ def _setup_2_uniform(unit:TileUnit) -> str|None:
 
 def _setup_2u_1(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = d * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   hexagon = affine.rotate(tiling_utils.get_regular_polygon(h, 6), 30, (0, 0))
@@ -2232,8 +2234,8 @@ def _setup_2u_1(unit:TileUnit) -> None:
 
 def _setup_2u_2(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = d * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, d/2 + t/3)
@@ -2251,7 +2253,7 @@ def _setup_2u_2(unit:TileUnit) -> None:
 
 def _setup_2u_3(unit:TileUnit) -> None:
   s = unit.spacing / 3
-  t = s * SQRT3 / 2
+  t = s * R3 / 2
   squares = [affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, dy)
              for dy in (-s, 0, s)]
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, 3*s/2 + t/3)
@@ -2265,7 +2267,7 @@ def _setup_2u_3(unit:TileUnit) -> None:
 
 def _setup_2u_4(unit:TileUnit) -> None:
   s = unit.spacing / 2
-  t = s * SQRT3 / 2
+  t = s * R3 / 2
   squares = [affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, dy)
              for dy in (-s/2, s/2)]
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, s + t/3)
@@ -2278,8 +2280,8 @@ def _setup_2u_4(unit:TileUnit) -> None:
 
 
 def _setup_2u_5(unit:TileUnit) -> None:
-  h = unit.spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   polys = _get_dissected_dodecagon(unit.spacing)
   hexagon = affine.translate(polys[0], 0, h + s)
@@ -2295,8 +2297,8 @@ def _setup_2u_5(unit:TileUnit) -> None:
 
 
 def _setup_2u_6(unit:TileUnit) -> None:
-  h = unit.spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   hexagon = affine.translate(tiling_utils.get_regular_polygon(h, 6), -s, 0)
   square = affine.translate(tiling_utils.get_regular_polygon(s, 4), s/2, s/2)
@@ -2312,8 +2314,8 @@ def _setup_2u_6(unit:TileUnit) -> None:
 
 
 def _setup_2u_7(unit:TileUnit) -> None:
-  h = unit.spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   hexagon = affine.translate(tiling_utils.get_regular_polygon(h, 6), -s, 0)
   square = affine.translate(tiling_utils.get_regular_polygon(s, 4), s/2, s/2)
@@ -2329,8 +2331,8 @@ def _setup_2u_7(unit:TileUnit) -> None:
 
 
 def _setup_2u_8(unit:TileUnit) -> None:
-  h = unit.spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   polys = _get_dissected_dodecagon(unit.spacing)
   polys.append(affine.translate(polys[11], -h - 2*s, 0))
@@ -2342,8 +2344,8 @@ def _setup_2u_8(unit:TileUnit) -> None:
 
 
 def _setup_2u_9(unit:TileUnit) -> None:
-  h = unit.spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   polys = _get_dissected_dodecagon(unit.spacing)
   polys.append(affine.translate(polys[11], -h - 2*s, 0))
@@ -2356,8 +2358,8 @@ def _setup_2u_9(unit:TileUnit) -> None:
 
 
 def _setup_2u_10(unit:TileUnit) -> None:
-  h = unit.spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   hexagons = [affine.translate(hexagon, 0, dy) for dy in (t, -t)]
@@ -2372,8 +2374,8 @@ def _setup_2u_10(unit:TileUnit) -> None:
 
 
 def _setup_2u_11(unit:TileUnit) -> None:
-  h = unit.spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, 4*t/3)
@@ -2387,8 +2389,8 @@ def _setup_2u_11(unit:TileUnit) -> None:
 
 
 def _setup_2u_12(unit:TileUnit) -> None:
-  h = unit.spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, 4*t/3)
@@ -2405,8 +2407,8 @@ def _setup_2u_12(unit:TileUnit) -> None:
 
 def _setup_2u_13(unit:TileUnit) -> None:
   d = unit.spacing
-  h = d * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = d * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   square = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, d/2 + s/2)
@@ -2431,7 +2433,7 @@ def _setup_2u_13(unit:TileUnit) -> None:
 
 def _setup_2u_14(unit:TileUnit) -> None:
   s = unit.spacing
-  t = s * SQRT3 / 2
+  t = s * R3 / 2
   square = tiling_utils.get_regular_polygon(s, 4)
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, s/2 + t/3)
   triangles = [triangle, affine.rotate(triangle, -60, (0, s/2 + t))]
@@ -2445,7 +2447,7 @@ def _setup_2u_14(unit:TileUnit) -> None:
 
 def _setup_2u_15(unit:TileUnit) -> None:
   s = unit.spacing
-  t = s * SQRT3 / 2
+  t = s * R3 / 2
   square = tiling_utils.get_regular_polygon(s, 4)
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, s/2 + t/3)
   triangles = [triangle, *[affine.rotate(triangle, a, (0, s/2 + t))
@@ -2460,7 +2462,7 @@ def _setup_2u_15(unit:TileUnit) -> None:
 
 def _setup_2u_16(unit:TileUnit) -> None:
   s = unit.spacing / 4
-  t = s * SQRT3 / 2
+  t = s * R3 / 2
   square = tiling_utils.get_regular_polygon(s, 4)
   squares = [affine.translate(square, 0, dy) for dy in (-s/2, -3*s/2)]
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, t/3)
@@ -2483,7 +2485,7 @@ def _setup_2u_16(unit:TileUnit) -> None:
 
 def _setup_2u_17(unit:TileUnit) -> None:
   s = unit.spacing / 4
-  t = s * SQRT3 / 2
+  t = s * R3 / 2
   square = tiling_utils.get_regular_polygon(s, 4)
   squares = [affine.translate(square, dx, -s/2) for dx in (-s/2, -3*s/2)]
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), -s/2, t/3)
@@ -2499,8 +2501,8 @@ def _setup_2u_17(unit:TileUnit) -> None:
 
 
 def _setup_2u_18(unit:TileUnit) -> None:
-  h = unit.spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = unit.spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   polys = _get_dissected_dodecagon_2(unit.spacing)
   polys.append(affine.translate(polys[10], -h - 2*s, 0))
@@ -2514,7 +2516,7 @@ def _setup_2u_18(unit:TileUnit) -> None:
 
 def _setup_2u_19(unit:TileUnit) -> None:
   h = unit.spacing / 2
-  s = h / SQRT3
+  s = h / R3
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   triangles = [affine.translate(tr, 0, h) for tr in _get_dissected_hexagon(h)]
@@ -2532,7 +2534,7 @@ def _setup_2u_19(unit:TileUnit) -> None:
 
 def _setup_2u_20(unit:TileUnit) -> None:
   h = unit.spacing / 2
-  s = h / SQRT3
+  s = h / R3
   t = h / 2
   polys = _get_dissected_hexagon_2(unit.spacing)
   polys.append(affine.translate(polys[2], 2*s, 0))
@@ -2544,8 +2546,8 @@ def _setup_2u_20(unit:TileUnit) -> None:
 
 
 def _get_dissected_dodecagon(spacing:float, mode:int = 0) -> list[geom.Polygon]:
-  h = spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   square = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, s/2 + t)
@@ -2559,8 +2561,8 @@ def _get_dissected_dodecagon(spacing:float, mode:int = 0) -> list[geom.Polygon]:
 
 
 def _get_dissected_dodecagon_2(spacing:float, mode:int = 0) -> list[geom.Polygon]:
-  h = spacing * SQRT3 / (2 + SQRT3)
-  s = h / SQRT3
+  h = spacing * R3 / (2 + R3)
+  s = h / R3
   t = h / 2
   square = affine.translate(tiling_utils.get_regular_polygon(s, 4), 0, s/2 + t)
   squares = [affine.rotate(square, a, (0, 0)) for a in range(0, 360, 60)]
@@ -2582,7 +2584,7 @@ def _get_dissected_hexagon(spacing:float) -> list[geom.Polygon]:
 def _get_dissected_hexagon_2(spacing:float) -> list[geom.Polygon]:
   h = spacing / 2
   t = h / 2
-  s = t * 2 / SQRT3
+  s = t * 2 / R3
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   triangle = affine.translate(tiling_utils.get_regular_polygon(t, 3), 0, 4*t/3)
   three_tris = [triangle, affine.rotate(triangle, 180, (-s/4, 3*t/2)),

@@ -54,6 +54,8 @@ TILE_IDS = [
   *["".join(x) for x in itertools.product(
     string.ascii_lowercase, string.ascii_lowercase)]
 ]
+R2 = 2 ** 0.5
+R3 = 3 ** 0.5
 
 def _parse_strand_label(s:str) -> list[str]:
   """Break a strand label specification in to a list of labels.
