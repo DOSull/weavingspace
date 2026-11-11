@@ -37,7 +37,7 @@ import shapely.affinity as affine
 import shapely.geometry as geom
 from shapely import line_interpolate_point
 
-from weavingspace import TileShape, tiling_utils
+from weavingspace import TileShape, tiling_utils, _regular_tilings
 
 TILE_IDS = [
   *string.ascii_lowercase,
@@ -73,8 +73,6 @@ available
 Kaplan C S, 2009 _Introductory Tiling Theory for Computer Graphics_ (Morgan &
 Claypool)
 """
-
-# TILE_IDS = tiling_utils.TILE_IDS
 
 def _setup_base_tiling(unit:TileUnit) -> str|None:
   """Set up hexagonal, square, diamond, or triangular tileable unit.
@@ -181,6 +179,12 @@ def _setup_cairo(unit:TileUnit) -> str|None:
   unit.setup_vectors((unit.spacing / R2,  unit.spacing/R2),
                      (unit.spacing / R2, -unit.spacing/R2))
   return None
+
+
+def _setup_regular_tile_unit(unit:TileUnit) -> str|None:
+  if any(k not in unit.__dict__ for k in ["code", "dual"]):
+    return ("""Regular tiling requires both code and dual parameters.""")
+  return _regular_tilings._setup_regular_tile_unit(unit)
 
 
 def _setup_hex_slice(unit:TileUnit) -> str|None:

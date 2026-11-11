@@ -706,7 +706,7 @@ class Tileable:
           ax.annotate(ID, (tile.centroid.x, tile.centroid.y),
             ha = "center", va = "center", bbox = {"lw": 0, "fc": "#ffffff40"})
     if r > 0:
-      self.get_local_patch(r=r).plot(
+      self.get_local_patch(r = r).plot(
         ax = ax, column = "tile_id", alpha = r_alpha, cmap = cm, **kwargs)
     if show_prototile:
       self.prototile.plot(ax = ax, ec = prototile_edgecolour, lw = 0.5,

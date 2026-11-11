@@ -135,6 +135,8 @@ class TileUnit(Tileable):
     match self.tiling_type:
       case "cairo":
         return geometries._setup_cairo(self)
+      case x if "regular" in x:
+        return geometries._setup_regular_tile_unit(self)
       case x if "hex" in x and "slice" in x:
         return geometries._setup_hex_slice(self)
       case x if "hex" in x and "dissect" in x:
