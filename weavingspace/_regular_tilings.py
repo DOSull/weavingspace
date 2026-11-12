@@ -47,10 +47,13 @@ num = int | float # convenience for cleaner typing
 # read tile specs from supplied JSON
 # note that there are definitely duplicates
 with open("tiles.json") as file:
-  Symbols1 = json.load(file)
+  s1 = json.load(file)
 with open("tiles-2.json") as file:
-  Symbols2 = json.load(file)
-Symbols = Symbols1 | Symbols2
+  s2 = json.load(file)
+Symbols = {k.lower(): v for k, v in (s1 | s2).items()}
+del s1
+del s2
+
 
 EPS = 1e-4
 R2 = 2 ** 0.5
@@ -75,8 +78,16 @@ def _prod(*a:Iterable[num]) -> tuple[num]:
     return tuple(math.prod(_) for _ in zip(*a, strict = True))
   return tuple(a[0] * math.prod(_) for _ in zip(*a[1:], strict = True))
 
+def _dot(a:Iterable[num], b:Iterable[num]) -> float:
+  return sum(_prod(a, b))
+
 def _norm(it:Iterable[num]) -> float:
-  return math.sqrt(sum(_prod(it, it)))
+  return math.sqrt(_dot(it, it))
+
+def _area(a:tuple[num], b:tuple[num]) -> float:
+  A, B = _norm(a), _norm(b)
+  angle = math.acos(_dot(a, b) / A / B)
+  return A * B * math.sin(angle)
 
 def _negate(it:Iterable[num]) -> tuple[num]:
   return tuple(-x for x in it)
@@ -120,9 +131,9 @@ CENTROID_OFFSETS = {
 }
 
 
-def _setup_regular_tile_unit(unit:"TileUnit") -> None:
+def _setup_tile_unit(unit:"TileUnit") -> None:
   mesh = get_mesh(unit.code)
-  if unit.dual:
+  if unit.dual is not None and unit.dual:
     polys = gpd.GeoSeries(
       [geom.Polygon([base_to_point(_prod(1/6, xy)) for xy in dual])
        for dual in mesh.dual_tiles])
@@ -133,7 +144,7 @@ def _setup_regular_tile_unit(unit:"TileUnit") -> None:
     geometry = gpd.GeoSeries(polys), crs = unit.crs,
     data = {"tile_id": TILE_IDS[:len(polys)]})
   v1, v2 = base_to_point(mesh.tvec1), base_to_point(mesh.tvec2)
-  sf = unit.spacing / math.sqrt(_norm(v1) * _norm(v2))
+  sf = unit.spacing / math.sqrt(_area(v1, v2))
   dxdy = _prod(0.5, _sum(v1, v2))
   unit.tiles.geometry = unit.tiles.geometry.scale(sf, sf, origin = dxdy)
   unit.setup_vectors(_prod(sf, v1), _prod(sf, v2))
