@@ -1649,9 +1649,9 @@ def _setup_chavey(unit:TileUnit) -> str|None:
   # these now delegated to _regular_tilings code with lookup for compatibility
   chavey_lookup = { # from Sá e Sá where possible
     "a": "stu",   "b": "nps_1", "c": "np_3",  "d": "tu_1",  "e": "uw_2",
-    "f": "vw_2",                "h": "pu_1",  "i": "uw_1",  "j": "pt",
+    "f": "vw_2",  "g": "t3058", "h": "pu_1",  "i": "uw_1",  "j": "pt",
     "k": "tuw_1", "l": "qr",    "m": "luw_1", "n": "hp_1",  "o": "gm_1",
-    "p": "ptu_1",               "r": "lw",    "s": "tuw_5", "t": "lmst",
+    "p": "ptu_1", "q": "t4107", "r": "lw",    "s": "tuw_5", "t": "lmst",
     "u": "lmu",
   }
   if unit.code in chavey_lookup:
@@ -1664,27 +1664,6 @@ def _setup_chavey(unit:TileUnit) -> str|None:
     unit.base_shape = TileShape.HEXAGON
     return "No valid Chavey tiling code supplied."
   return None
-
-
-def _setup_chavey_g(unit:TileUnit) -> None:
-  """Set up 3.3.3.3.3.3;3.3.3.3.6 (another one)."""
-  h = unit.spacing / 2
-  s = h / R3
-  t = h / 2
-  hexes, triangles = [], []
-  hexes.append(tiling_utils.get_regular_polygon(h, 6))
-  tri = tiling_utils.get_regular_polygon(t, 3)
-  triangles.append(affine.translate(tri, s, -t - tri.bounds[1]))
-  triangles.append(affine.rotate(triangles[0], 180, (5*s/4, -t/2)))
-  triangles.append(affine.rotate(triangles[1], 180, (3*s/2, 0)))
-  triangles.extend([affine.rotate(tr, a, (0, 0)) for a in range(60, 360, 60)
-                                                 for tr in triangles])
-  polys = hexes + triangles
-  unit.setup_vectors((0, 2*h), (3*s, h), (3*s, -h))
-  unit.tiles = gpd.GeoDataFrame(
-    data = {"tile_id": list(TILE_IDS)[:len(polys)]},
-    crs = unit.crs,
-    geometry = gpd.GeoSeries(polys))
 
 
 def _setup_chavey_q(unit:TileUnit) -> None:
