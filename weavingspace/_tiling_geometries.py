@@ -44,8 +44,19 @@ TILE_IDS = [
   *["".join(x) for x in itertools.product(
     string.ascii_lowercase, string.ascii_lowercase)]
 ]
+
 R2 = 2 ** 0.5
 R3 = 3 ** 0.5
+
+# these tilings now delegated to _regular_tilings with lookup for compatibility
+CHAVEY_LOOKUP = { # from Sá e Sá where possible
+  "a": "stu",   "b": "nps_1", "c": "np_3",  "d": "tu_1",  "e": "uw_2",
+  "f": "vw_2",  "g": "t3058", "h": "pu_1",  "i": "uw_1",  "j": "pt",
+  "k": "tuw_1", "l": "qr",    "m": "luw_1", "n": "hp_1",  "o": "gm_1",
+  "p": "ptu_1", "q": "t4107", "r": "lw",    "s": "tuw_5", "t": "lmst",
+  "u": "lmu",
+}
+
 
 """Functions for setting up a TileUnit with various tile geometries.
 
@@ -398,50 +409,39 @@ def _setup_laves(unit:TileUnit) -> str|None:
   if any(k not in unit.__dict__ for k in ["code"]):
     return ("""Laves tiling requires vertex degree code to be supplied.""")
   match unit.code:
-    case "3.3.3.3.3.3":
-      # this is the regular hexagons
+    case "3.3.3.3.3.3": # this is the regular hexagons
       unit.base_shape = TileShape.HEXAGON
       return ("""Laves 3.3.3.3.3.3 is a basic hexagonal tiling. Perhaps you
               want a hex-colouring, hex-slice or hex-dissection tiling?""")
-    case "3.3.3.3.6":
-      # this one needs its own code
+    case "3.3.3.3.6":   # this one needs its own code
       _setup_laves_3_3_3_3_6(unit)
-    case "3.3.3.4.4":
-      # this is a boring tiling...
+    case "3.3.3.4.4":   # this is a boring tiling...
       _setup_laves_3_3_3_4_4(unit)
-    case "3.3.4.3.4":
-      # king of tilings!
+    case "3.3.4.3.4":   # king of tilings!
       _setup_cairo(unit)
-    case "3.4.6.4":
-      # the hex 6-slice
+    case "3.4.6.4":     # the hex 6-slice
       unit.n = 6
       unit.offset = 1
       _setup_hex_slice(unit)
-    case "3.6.3.6":
-      # hex 3-slice
+    case "3.6.3.6":     # hex 3-slice
       unit.n = 3
       unit.offset = 0
       _setup_hex_slice(unit)
-    case "3.12.12":
-      # again this one needs its own
+    case "3.12.12":     # again this one needs its own
       _setup_laves_3_12_12(unit)
-    case "4.4.4.4":
-      # square grid
+    case "4.4.4.4":     # square grid
       unit.base_shape = TileShape.RECTANGLE
       return ("""Laves 4.4.4.4 is a basic square tiling. Perhaps you want a
               square-colouring or square-slice tiling?""")
-    case "4.6.12":
-      # hex 12-slice
+    case "4.6.12":      # hex 12-slice
       unit.n = 12
       unit.offset = 0
       _setup_hex_slice(unit)
-    case "4.8.8":
-      # square 4-slice
+    case "4.8.8":       # square 4-slice
       unit.n = 4
       unit.offset = 0.0
       _setup_square_slice(unit)
-    case "6.6.6":
-      # triangles
+    case "6.6.6":       # triangles
       unit.base_shape = TileShape.TRIANGLE
       return """Note that Laves 3.3.3.3.3.3 is a basic triangle tiling."""
     case _:
@@ -467,12 +467,12 @@ def _setup_laves_3_3_3_3_6(unit:TileUnit) -> None:
   hex_p = list(hexagon.exterior.coords)
   # now replace first and last points by (0, 0)
   # (note shapely doesn't require closure of the polygon)
-  petal = geom.Polygon([(0, 0)] + hex_p[1:5])
+  petal = geom.Polygon([(0, 0), *hex_p[1:5]])
   offset_a = np.degrees(np.arctan(1 / 3 / R3))
   petals = [
     affine.rotate(petal, a + offset_a, origin = (0, 0))
     for a in range(30, 360, 60)]
-  unit.setup_vectors((                     0,  unit.spacing    ),
+  unit.setup_vectors((                  0,  unit.spacing    ),
                      (unit.spacing * R3/2,  unit.spacing / 2),
                      (unit.spacing * R3/2, -unit.spacing / 2))
   unit.tiles = gpd.GeoDataFrame(
@@ -483,9 +483,6 @@ def _setup_laves_3_3_3_3_6(unit:TileUnit) -> None:
 
 def _setup_laves_3_3_3_4_4(unit:TileUnit) -> None:
   """Set up Laves [3.3.3.4.4] which is like two houses back to back.
-
-  Similar to the H3 7 hexagon group with the central hex removed and each
-  hex 'taking' a 1/6 share of the central hex.
 
   Args:
     unit (TileUnit):  the TileUnit to setup.
@@ -524,13 +521,11 @@ def _setup_laves_3_12_12(unit:TileUnit) -> None:
   pts = list(hexagon.exterior.coords)
   tri1 = geom.Polygon([pts[0], pts[2], [0, 0]])
   tri2 = geom.Polygon([pts[0], pts[1], pts[2]])
-  tris1 = [affine.rotate(tri1, a, origin = (0, 0))
-       for a in range(0, 360, 120)]
-  tris2 = [affine.rotate(tri2, a, origin = (0, 0))
-       for a in range(0, 360, 120)]
+  tris1 = [affine.rotate(tri1, a, origin = (0, 0)) for a in range(0, 360, 120)]
+  tris2 = [affine.rotate(tri2, a, origin = (0, 0)) for a in range(0, 360, 120)]
   # reorder so the 'inner' and 'outer' triangles are labelled alternately
   tris = itertools.chain(*zip(tris1, tris2, strict = True))
-  unit.setup_vectors((                     0,  unit.spacing    ),
+  unit.setup_vectors((                  0,  unit.spacing    ),
                      (unit.spacing * R3/2,  unit.spacing / 2),
                      (unit.spacing * R3/2, -unit.spacing / 2))
   unit.tiles = gpd.GeoDataFrame(
@@ -597,24 +592,24 @@ def _setup_archimedean(unit:TileUnit) -> str|None:
 #  d for height of dodecagons
 # rescaling so that the resulting tile unit meets the unit.spacing request is
 # in most cases exact, but where the tile unit departs from a plain square or
-# hexagon it's approximate.
+# hexagon it is approximate.
 def _setup_archimedean_3_3_3_3_6(unit:TileUnit) -> None:
   """Set up (3.3.3.3.6)."""
   h = unit.spacing * np.sqrt(3/7)
   t = h / 2
+  w = 2 * t / R3
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   tri = tiling_utils.get_regular_polygon(t, 3)
-  tri_up = affine.translate(tri, 0, -tri.bounds[3])
-  tri_dn = affine.rotate(tri_up, 180, origin = (0, 0))
-  wdth, hght = tri.bounds[2] - tri.bounds[0], tri.bounds[3] - tri.bounds[1]
-  triangles = [affine.translate(tri_up,        0,  2*hght),
-               affine.translate(tri_up,   wdth  ,  2*hght),
-               affine.translate(tri_dn,   wdth  ,       0),
-               affine.translate(tri_up, 3*wdth/2,    hght),
-               affine.translate(tri_dn, 3*wdth/2,   -hght),
-               affine.translate(tri_up,   wdth  ,       0),
-               affine.translate(tri_dn,   wdth  , -2*hght),
-               affine.translate(tri_dn,        0, -2*hght)]
+  tri_u = affine.translate(tri,  0, 4*t/3)
+  tri_d = affine.rotate(tri_u, 180, origin = (0, t))
+  triangles = [tri_u]
+  triangles.append(affine.translate(tri_u, w, 0))
+  triangles.append(affine.translate(tri_d, w, 0))
+  triangles.append(triangles[-2],  w/2, -t)
+  triangles.append(triangles[-2],  w/2, -t)
+  triangles.append(triangles[-2], -w/2, -t)
+  triangles.append(triangles[-2], -w/2, -t)
+  triangles.append(triangles[-1], -w  ,  0)
   polys = [hexagon, *triangles]
   unit.setup_vectors((-wdth/2, 3*hght), (2*wdth, 2*hght), (5*wdth/2, -hght))
   unit.tiles = gpd.GeoDataFrame(
@@ -628,7 +623,7 @@ def _setup_archimedean_3_3_3_4_4(unit:TileUnit) -> None:
   t = s * R3/2
   square = tiling_utils.get_regular_polygon(s, 4)
   tri = tiling_utils.get_regular_polygon(t, 3)
-  tri_up = affine.translate(tri, 0, -tri.bounds[1] + s/2)
+  tri_up = affine.translate(tri, 0, t/3 + s/2)
   tri_dn = affine.rotate(tri_up, 180, origin = (0, 0))
   polys = [square, tri_up, tri_dn]
   unit.setup_vectors((s/2, s+t), (s, 0), (s/2, -s-t))
@@ -643,7 +638,7 @@ def _setup_archimedean_3_3_4_3_4(unit:TileUnit) -> None:
   t = s * R3/2
   square = tiling_utils.get_regular_polygon(s, 4)
   tri = tiling_utils.get_regular_polygon(t, 3)
-  tri1 = affine.translate(tri, 0, -tri.bounds[3])
+  tri1 = affine.translate(tri, 0, -2*t/3)
   tri2 = affine.rotate(tri1,  180, origin = (0, -t))
   tri3 = affine.rotate(tri1,  150, origin = (0,  0))
   tri4 = affine.rotate(tri1, -150, origin = (0,  0))
@@ -666,13 +661,13 @@ def _setup_archimedean_3_4_6_4(unit:TileUnit) -> None:
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   square = tiling_utils.get_regular_polygon(s, 4)
   tri = tiling_utils.get_regular_polygon(t, 3)
-  sq1 = affine.translate(square, 0, s / 2 + t)
+  sq1 = affine.translate(square, 0, s/2 + t)
   sq2 = affine.rotate(sq1,  60, origin = (0, 0))
   sq3 = affine.rotate(sq1, -60, origin = (0, 0))
-  tri1 = affine.translate(tri, 0, t - tri.bounds[1])
-  tri2 = affine.translate(tri, 0, t - tri.bounds[1])
-  tri1 = affine.rotate(tri1, 90, origin = (-s / 2, t))
-  tri2 = affine.rotate(tri2, -90, origin = (s / 2, t))
+  tri1 = affine.translate(tri, 0, 4*t/3)
+  tri2 = affine.translate(tri, 0, 4*t/3)
+  tri1 = affine.rotate(tri1,  90, origin = (-s/2, t))
+  tri2 = affine.rotate(tri2, -90, origin = ( s/2, t))
   polys = [hexagon, sq2, tri1, sq1, tri2, sq3]
   unit.setup_vectors((0, h + s), (t + 3*s/2,  t + s/2), (t + 3*s/2, -t - s/2))
   unit.tiles = gpd.GeoDataFrame(
@@ -686,9 +681,8 @@ def _setup_archimedean_3_6_3_6(unit:TileUnit) -> None:
   t = h / 2
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   tri = tiling_utils.get_regular_polygon(t, 3)
-  tri1 = affine.translate(tri, 0, t - tri.bounds[1])
-  tri2 = affine.rotate(tri, 180)
-  tri2 = affine.translate(tri2, 0, -t - tri.bounds[3])
+  tri1 = affine.translate(tri, 0, 4*t/3)
+  tri2 = affine.rotate(tri1, 180, (0, 0))
   polys = [hexagon, tri1, tri2]
   unit.setup_vectors((t*2/R3,  h), (t*2/R3, -h))
   unit.tiles = gpd.GeoDataFrame(
@@ -702,7 +696,7 @@ def _setup_archimedean_3_12_12(unit:TileUnit) -> None:
   t = d * R3/2 / (2 + R3)
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   tri = tiling_utils.get_regular_polygon(t, 3)
-  tri = affine.translate(tri, 0, unit.spacing / 2 - tri.bounds[1])
+  tri = affine.translate(tri, 0, unit.spacing / 2 + t/3)
   tri_1 = affine.rotate(tri,  30, origin = (0, 0))
   tri_2 = affine.rotate(tri, -30, origin = (0, 0))
   polys = [dodecagon, tri_1, tri_2]
@@ -720,16 +714,16 @@ def _setup_archimedean_4_6_12(unit:TileUnit) -> None:
   dodecagon = tiling_utils.get_regular_polygon(d, 12)
   hexagon = tiling_utils.get_regular_polygon(h, 6)
   square = tiling_utils.get_regular_polygon(s, 4)
-  sq1 = affine.translate(square, 0, (s + d) / 2)
+  sq1 = affine.translate(square, 0, s/2 + d/2)
   sq2 = affine.rotate(sq1,  60, origin = (0, 0))
   sq3 = affine.rotate(sq1, -60, origin = (0, 0))
-  hex1 = affine.translate(hexagon, 0, (h + d) / 2)
+  hex1 = affine.translate(hexagon, 0, h/2 + d/2)
   hex1 = affine.rotate(hex1,  30, origin = (0, 0))
   hex2 = affine.rotate(hex1, -60, origin = (0, 0))
   polys = [dodecagon, sq2, hex1, sq1, hex2, sq3]
-  unit.setup_vectors((                0,   d + s     ),
-                     ((d + s) * R3/2,  (d + s) / 2),
-                     ((d + s) * R3/2, -(d + s) / 2))
+  unit.setup_vectors((             0,    d + s  ),
+                     ((d + s) * R3/2,  d/2 + s/2),
+                     ((d + s) * R3/2, -d/2 + s/2))
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list("abcdef")}, crs = unit.crs,
     geometry = gpd.GeoSeries(polys))
@@ -1646,23 +1640,15 @@ def _setup_chavey(unit:TileUnit) -> str|None:
   """
   if any(k not in unit.__dict__ for k in ["code"]):
     return "Chavey tilings require a letter code to be be supplied."
-  # these now delegated to _regular_tilings code with lookup for compatibility
-  chavey_lookup = { # from Sá e Sá where possible
-    "a": "stu",   "b": "nps_1", "c": "np_3",  "d": "tu_1",  "e": "uw_2",
-    "f": "vw_2",  "g": "t3058", "h": "pu_1",  "i": "uw_1",  "j": "pt",
-    "k": "tuw_1", "l": "qr",    "m": "luw_1", "n": "hp_1",  "o": "gm_1",
-    "p": "ptu_1", "q": "t4107", "r": "lw",    "s": "tuw_5", "t": "lmst",
-    "u": "lmu",
-  }
-  if unit.code in chavey_lookup:
-    unit.code = chavey_lookup[unit.code]
+  if unit.code in CHAVEY_LOOKUP:
+    unit.code = CHAVEY_LOOKUP[unit.code]
     unit.tiling_type = "regular"
     _setup_regular_tile_unit(unit)
   elif unit.code in "gq":
       globals()[f"_setup_chavey_{unit.code}"](unit)
   else:
     unit.base_shape = TileShape.HEXAGON
-    return "No valid Chavey tiling code supplied."
+    return "No valid Chavey tiling code ('a' to 'u') supplied."
   return None
 
 

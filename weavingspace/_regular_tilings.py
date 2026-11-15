@@ -70,30 +70,30 @@ X_BASE = 1, R3/2,  0.5, 0
 Y_BASE = 0,  0.5, R3/2, 1
 
 # functions for combining arbitrary numbers of arbitrary length vectors
-def _sum(*a:Iterable[num]) -> tuple[num]:
+def vsum(*a:Iterable[num]) -> tuple[num]:
   return tuple(sum(_) for _ in zip(*a, strict = True))
 
-def _prod(*a:Iterable[num]) -> tuple[num]:
+def vprod(*a:Iterable[num]) -> tuple[num]:
   if isinstance(a[0], Iterable):
     return tuple(math.prod(_) for _ in zip(*a, strict = True))
   return tuple(a[0] * math.prod(_) for _ in zip(*a[1:], strict = True))
 
-def _dot(a:Iterable[num], b:Iterable[num]) -> float:
-  return sum(_prod(a, b))
+def dot(a:Iterable[num], b:Iterable[num]) -> float:
+  return sum(vprod(a, b))
 
-def _norm(it:Iterable[num]) -> float:
-  return math.sqrt(_dot(it, it))
+def norm(it:Iterable[num]) -> float:
+  return math.sqrt(dot(it, it))
 
-def _area(a:tuple[num], b:tuple[num]) -> float:
-  A, B = _norm(a), _norm(b)
-  angle = math.acos(_dot(a, b) / A / B)
+def area(a:tuple[num], b:tuple[num]) -> float:
+  A, B = norm(a), norm(b)
+  angle = math.acos(dot(a, b) / A / B)
   return A * B * math.sin(angle)
 
-def _negate(it:Iterable[num]) -> tuple[num]:
+def negate(it:Iterable[num]) -> tuple[num]:
   return tuple(-x for x in it)
 
-def _negate_and_extend(it:Iterable[Iterable[num]]) -> tuple[tuple[num]]:
-  return (*it, *(_negate(x) for x in it))
+def negate_and_extend(it:Iterable[Iterable[num]]) -> tuple[tuple[num]]:
+  return (*it, *(negate(x) for x in it))
 
 # Coordinates of the twelve 30º spaced unit vectors expressed as combinations
 # of 0, 30, 60, and 90º unit vectors (described in the Soto Sanchéz paper as
@@ -108,13 +108,15 @@ BASE_COORDS = [
   ( 0, -1,  0,  1),
 ]
 # last six are 180º rotations, i.e. negated copies of first six
-BASE_COORDS = _negate_and_extend(BASE_COORDS)
+BASE_COORDS = negate_and_extend(BASE_COORDS)
 
-# Offsets of centroids of duals from a vertex expressed in BASE_COORDS (times 6)
+# Offsets of centroids of tiles from a vertex expressed in BASE_COORDS (times 6)
 # indexed by number of sides of polygon and heading of incident edge from vertex
 # E.g., CENTROID_OFFSETS[4][2] is offset of centroid of a square for edge at 60º
 # Six multiplier keeps all numbers integers, allowing precise maths - divide by
-# six as needed when Euclidean space coordinates are requested.
+# six as needed when Euclidean space coordinates are requested. Used to build
+# dual tiles, whose corners are centroids of tiles around each vertex. The six
+# multiplier ensures all coordinates are integers allowing exact arithmetic.
 CENTROID_OFFSETS = {
   3:  ((2, 0, 2, 0), (0, 2, 0, 2), (-2, 0, 4, 0), 
        (0, -2, 0, 4), (-4, 0, 2, 0), (0, -4, 0, 2)),
@@ -127,15 +129,29 @@ CENTROID_OFFSETS = {
 }
 # again, last six are 180º rotations of first six
 CENTROID_OFFSETS = {
-  k: _negate_and_extend(v) for k, v in CENTROID_OFFSETS.items()
+  k: negate_and_extend(v) for k, v in CENTROID_OFFSETS.items()
 }
 
 
-def _setup_tile_unit(unit:"TileUnit") -> None:
+def _setup_tile_unit(unit:"TileUnit") -> str|None:
+  """Set elements in supplied tile unit by constructing mesh.
+
+  The supplied unit will have code (str) and dual (bool) set, along with spacing
+  and crs, which are set as requested.
+
+  Args:
+    unit (TileUnit): TileUnit object with `code` and `dual` parameters.
+
+  Returns:
+    str|None: str error code is returned if there is a problem.
+
+  """
   mesh = get_mesh(unit.code)
+  if isinstance(mesh, str):
+    return mesh
   if unit.dual is not None and unit.dual:
     polys = gpd.GeoSeries(
-      [geom.Polygon([base_to_point(_prod(1/6, xy)) for xy in dual])
+      [geom.Polygon([base_to_point(vprod(1/6, xy)) for xy in dual])
        for dual in mesh.dual_tiles])
   else:
     polys = [geom.Polygon([base_to_point(xy) for xy in points])
@@ -144,10 +160,11 @@ def _setup_tile_unit(unit:"TileUnit") -> None:
     geometry = gpd.GeoSeries(polys), crs = unit.crs,
     data = {"tile_id": TILE_IDS[:len(polys)]})
   v1, v2 = base_to_point(mesh.tvec1), base_to_point(mesh.tvec2)
-  sf = unit.spacing / math.sqrt(_area(v1, v2))
-  dxdy = _prod(0.5, _sum(v1, v2))
+  sf = unit.spacing / math.sqrt(area(v1, v2))
+  dxdy = vprod(0.5, vsum(v1, v2))
   unit.tiles.geometry = unit.tiles.geometry.scale(sf, sf, origin = dxdy)
-  unit.setup_vectors(_prod(sf, v1), _prod(sf, v2))
+  unit.setup_vectors(vprod(sf, v1), vprod(sf, v2))
+  return None
 
 
 def change_base(a:Iterable[num],
@@ -180,34 +197,34 @@ def base_to_point(coords:Iterable[int]) -> tuple[float]:
     tuple[float]: corresponding tuple of coordinates in Euclidean space.
 
   """
-  return sum(_prod(coords, X_BASE)), \
-         sum(_prod(coords, Y_BASE))
+  return sum(vprod(coords, X_BASE)), \
+         sum(vprod(coords, Y_BASE))
 
 
-def get_vertices(points:Iterable[Iterable[int]],
-                 t1:Iterable[int],
-                 t2:Iterable[int]) -> tuple[int]:
-  """Get points in fundamental unit and neighbouring fundamental units.
+# def get_vertices(points:Iterable[Iterable[int]],
+#                  t1:Iterable[int],
+#                  t2:Iterable[int]) -> tuple[int]:
+#   """Get points in fundamental unit and neighbouring fundamental units.
 
-  Applies translation vectors to augment list of supplied points with matching
-  points in each translation vector direction, and also one move diagonally,
-  i.e. at (0, 0), (0, 1), (1, 0), and (1, 1).
+#   Applies translation vectors to augment list of supplied points with matching
+#   points in each translation vector direction, and also one move diagonally,
+#   i.e. at (0, 0), (0, 1), (1, 0), and (1, 1).
 
-  Args:
-    points (Iterable[int]): points in base tile.
-    t1 (Iterable[int]): first translation vector.
-    t2 (Iterable[int]): second translation vector.
+#   Args:
+#     points (Iterable[int]): points in base tile.
+#     t1 (Iterable[int]): first translation vector.
+#     t2 (Iterable[int]): second translation vector.
 
-  Returns:
-    tuple[int]: extended tuple of points in base tile and matching points
-      offset by translation vectors.
+#   Returns:
+#     tuple[int]: extended tuple of points in base tile and matching points
+#       offset by translation vectors.
 
-  """
-  patch = []
-  for k1 in range(2):
-    for k2 in range(2):
-      patch.extend([_sum(pt, _prod(k1, t1), _prod(k2, t2)) for pt in points])
-  return patch
+#   """
+#   patch = []
+#   for k1 in range(2):
+#     for k2 in range(2):
+#       patch.extend([vsum(pt, vprod(k1, t1), vprod(k2, t2)) for pt in points])
+#   return patch
 
 
 def get_patch_hash(points:Iterable[Iterable[int]],
@@ -229,12 +246,11 @@ def get_patch_hash(points:Iterable[Iterable[int]],
 
   """
   patch = {}
-  # note both loops n0 to n1 _inclusive_
-  for k1 in range(n0, n1 + 1):
-    for k2 in range(n0, n1 + 1):
+  for k1 in range(n0, n1):
+    for k2 in range(n0, n1):
       for point in points:
         # coords are ints so are tuple is a safe dictionary key
-        hashcode = _sum(point, _prod(k1, t1), _prod(k2, t2))
+        hashcode = vsum(point, vprod(k1, t1), vprod(k2, t2))
         patch[hashcode] = 1
   return patch
 
@@ -252,7 +268,7 @@ def get_star(v:Iterable[int], patch:Iterable[Iterable[int]]) -> list[int]:
   """
   star = []
   for k in range(12):
-    candidate = _sum(v, BASE_COORDS[k])
+    candidate = vsum(v, BASE_COORDS[k])
     if candidate in patch:
       star.append(k)
   return star
@@ -296,7 +312,7 @@ def get_face(vertex:Iterable[int],
   J = math.floor(12 / n_sides)
   face = [vertex]
   for angle in range(0, 12, J):
-    p = _sum(face[-1], BASE_COORDS[(heading + angle) % 12])
+    p = vsum(face[-1], BASE_COORDS[(heading + angle) % 12])
     face.append(p)
   return face[:-1]
 
@@ -339,7 +355,8 @@ def get_dual_face(star:Iterable[int],
   for left, right in zip(star, [*star[1:], star[0]], strict = True):
     n = omega_to_poly((right - left) % 12)
     if n > 0:
-      corners.append(_sum(_prod(6, centre), CENTROID_OFFSETS[n][left]))
+      # scale centre by 6 to align with CENTROID_OFFSET coords
+      corners.append(vsum(vprod(6, centre), CENTROID_OFFSETS[n][left]))
   return corners
 
 
@@ -384,13 +401,14 @@ def get_mesh(tiling_code:str) -> ArchimedeanMesh:
     ArchimedeanMesh: desired mesh populated with vectors, tiles, and dual tiles.
 
   """
+  if tiling_code not in Symbols:
+    return "Unknown code for regular tiling."
   if tiling_code in ["t1002", "J"]:
     return get_488()
   tvec1 = Symbols[tiling_code]["T1"]
   tvec2 = Symbols[tiling_code]["T2"]
-  seed = Symbols[tiling_code]["Seed"]
-  vertices = get_vertices(seed, tvec1, tvec2)
-  patch = get_patch_hash(seed, tvec1, tvec2)
+  vertices = Symbols[tiling_code]["Seed"]
+  patch = get_patch_hash(vertices, tvec1, tvec2)
   tiles = [] # tile polygons
   centroids_hash = {} # to not triple polygons - each incident on 3 vertices
   dual_tiles = []
@@ -398,12 +416,12 @@ def get_mesh(tiling_code:str) -> ArchimedeanMesh:
     star = get_star(vertex, patch)
     these_faces = star_to_faces(star, vertex)
     for face in these_faces:
-      centroid = tuple(int(6 * p / len(face)) for p in _sum(*face))
-      # times-6 factor keeps coords as integers, which we enforce to stop
+      centroid = tuple(int(6 * p / len(face)) for p in vsum(*face))
+      # times-6 factor keeps coords as integers, and is enforced to stop
       # floating point errors creeping in, and so that centroid can be safely
       # used as dictionary key
       if centroid not in centroids_hash and \
-          is_in_parallelogram(_prod(1/6, centroid), tvec1, tvec2):
+          is_in_parallelogram(vprod(1/6, centroid), tvec1, tvec2):
         centroids_hash[centroid] = 1
         tiles.append(face)
     if is_in_parallelogram(vertex, tvec1, tvec2):
@@ -428,14 +446,14 @@ def get_488() -> ArchimedeanMesh:
   """
   mesh = ArchimedeanMesh()
   D = R2 / 2  # key unit vector at 45º is (0.707, 0.707)
-  mesh.tvec1 = [1 + D,   0, 0, 1 + D]
+  mesh.tvec1 = [  1 + D, 0, 0, 1 + D]
   mesh.tvec2 = [2 + 2*D, 0, 0,     0]
   E, N, NE, SE = [1, 0, 0, 0], [0, 0, 0, 1], [D, 0, 0, D], [D, 0, 0, -D]
   mesh.tiles = [
-    [[0, 0, 0, 0], E, _sum(E, N), N],
-     [E, _sum(E, N), _sum(E, N, NE), _sum(E, N, NE, E),
-      _sum(E, N, NE, E, SE), _sum(E, SE, E, NE), _sum(E, SE, E), _sum(E, SE)]]
-  origin      = [3, 0, 0, 3]
+    [[0, 0, 0, 0], E, vsum(E, N), N],
+     [E, vsum(E, N), vsum(E, N, NE), vsum(E, N, NE, E),
+      vsum(E, N, NE, E, SE), vsum(E, SE, E, NE), vsum(E, SE, E), vsum(E, SE)]]
+  origin      = [      3, 0, 0,       3]
   right, left = [9 + 6*D, 0, 0,       3], [-3 - 6*D, 0, 0,        3]
   up, down    = [      3, 0, 0, 9 + 6*D], [       3, 0, 0, -3 - 6*D]
   mesh.dual_tiles = [[origin, right,  up], [origin, up,    left],
