@@ -89,11 +89,11 @@ def area(a:tuple[num], b:tuple[num]) -> float:
   angle = math.acos(dot(a, b) / A / B)
   return A * B * math.sin(angle)
 
-def negate(it:Iterable[num]) -> tuple[num]:
-  return tuple(-x for x in it)
+def negate(a:Iterable[num]) -> tuple[num]:
+  return tuple(-x for x in a)
 
-def negate_and_extend(it:Iterable[Iterable[num]]) -> tuple[tuple[num]]:
-  return (*it, *(negate(x) for x in it))
+def negate_and_extend(a:Iterable[Iterable[num]]) -> tuple[tuple[num]]:
+  return (*a, *(negate(x) for x in a))
 
 # Coordinates of the twelve 30º spaced unit vectors expressed as combinations
 # of 0, 30, 60, and 90º unit vectors (described in the Soto Sanchéz paper as
@@ -127,7 +127,7 @@ CENTROID_OFFSETS = {
   12: ((0, 0, 6, 6), (-6, 0, 6, 6), (-6, -6, 6, 6),
        (-6, -6, 0, 6), (-6, -6, 0, 0), (0, -6, -6, 0)),
 }
-# again, last six are 180º rotations of first six
+# last six are 180º rotations of first six
 CENTROID_OFFSETS = {
   k: negate_and_extend(v) for k, v in CENTROID_OFFSETS.items()
 }
@@ -201,37 +201,11 @@ def base_to_point(coords:Iterable[int]) -> tuple[float]:
          sum(vprod(coords, Y_BASE))
 
 
-# def get_vertices(points:Iterable[Iterable[int]],
-#                  t1:Iterable[int],
-#                  t2:Iterable[int]) -> tuple[int]:
-#   """Get points in fundamental unit and neighbouring fundamental units.
-
-#   Applies translation vectors to augment list of supplied points with matching
-#   points in each translation vector direction, and also one move diagonally,
-#   i.e. at (0, 0), (0, 1), (1, 0), and (1, 1).
-
-#   Args:
-#     points (Iterable[int]): points in base tile.
-#     t1 (Iterable[int]): first translation vector.
-#     t2 (Iterable[int]): second translation vector.
-
-#   Returns:
-#     tuple[int]: extended tuple of points in base tile and matching points
-#       offset by translation vectors.
-
-#   """
-#   patch = []
-#   for k1 in range(2):
-#     for k2 in range(2):
-#       patch.extend([vsum(pt, vprod(k1, t1), vprod(k2, t2)) for pt in points])
-#   return patch
-
-
-def get_patch_hash(points:Iterable[Iterable[int]],
-                   t1:Iterable[int],
-                   t2:Iterable[int],
-                   n0:int = -1, n1:int = 2) -> dict[tuple[int]:int]:
-  """Get dictionary with integer tuple keys for all points in local patch.
+def get_patch(points:Iterable[Iterable[int]],
+              t1:Iterable[int],
+              t2:Iterable[int],
+              n0:int = -1, n1:int = 2) -> set[tuple[int]:int]:
+  """Get a set of all points in local patch defined by t1 and t2.
 
   Args:
     points (Iterable[int]): points in base tile.
@@ -241,17 +215,18 @@ def get_patch_hash(points:Iterable[Iterable[int]],
     n1 (int): upper bound on offset tiles to check in patch.
 
   Returns:
-    dict[tuple[int]:int]: a dictionary keyed by base tile integer coordinates
-      of all points and their matching points in the surrounding patch.
+    set[tuple[int]:int]: a set of all points in the surrounding patch
+      corresponding to the supplied points displace by the supplied translation
+      vectors.
 
   """
-  patch = {}
+  patch = set()
   for k1 in range(n0, n1):
     for k2 in range(n0, n1):
       for point in points:
-        # coords are ints so are tuple is a safe dictionary key
+        # coords are ints so are safe to add to a set
         hashcode = vsum(point, vprod(k1, t1), vprod(k2, t2))
-        patch[hashcode] = 1
+        patch.add(hashcode)
   return patch
 
 
@@ -274,7 +249,7 @@ def get_star(v:Iterable[int], patch:Iterable[Iterable[int]]) -> list[int]:
   return star
 
 
-def omega_to_poly(angle:int) -> int:
+def interior_angle_to_n_sides(angle:int) -> int:
   """Return polygon degree based on angle supplied as multiple of 30º.
 
   Args:
@@ -285,14 +260,12 @@ def omega_to_poly(angle:int) -> int:
 
   """
   k = abs(angle)
-  n = 0
   return (3 if k == 2
     else  4 if k == 3
     else  6 if k == 4
     else 12 if k == 5
-    else omega_to_poly(12 - k) if k >= 6
+    else interior_angle_to_n_sides(12 - k) if k >= 6
     else None)
-  return n
 
 
 def get_face(vertex:Iterable[int],
@@ -309,7 +282,7 @@ def get_face(vertex:Iterable[int],
     list[tuple[int]]: corners of required polygon.
 
   """
-  J = math.floor(12 / n_sides)
+  J = 12 // n_sides
   face = [vertex]
   for angle in range(0, 12, J):
     p = vsum(face[-1], BASE_COORDS[(heading + angle) % 12])
@@ -332,8 +305,8 @@ def star_to_faces(star:Iterable[int],
   """
   faces = []
   for left, right in zip(star, [*star[1:], star[0]], strict = True):
-    n = omega_to_poly((right - left) % 12)
-    if n > 0:
+    n = interior_angle_to_n_sides((right - left) % 12)
+    if n is not None:
       face = get_face(vertex, left, n)
       faces.append(face)
   return faces
@@ -353,7 +326,7 @@ def get_dual_face(star:Iterable[int],
   """
   corners = []
   for left, right in zip(star, [*star[1:], star[0]], strict = True):
-    n = omega_to_poly((right - left) % 12)
+    n = interior_angle_to_n_sides((right - left) % 12)
     if n > 0:
       # scale centre by 6 to align with CENTROID_OFFSET coords
       corners.append(vsum(vprod(6, centre), CENTROID_OFFSETS[n][left]))
@@ -408,9 +381,9 @@ def get_mesh(tiling_code:str) -> ArchimedeanMesh:
   tvec1 = Symbols[tiling_code]["T1"]
   tvec2 = Symbols[tiling_code]["T2"]
   vertices = Symbols[tiling_code]["Seed"]
-  patch = get_patch_hash(vertices, tvec1, tvec2)
+  patch = get_patch(vertices, tvec1, tvec2)
   tiles = [] # tile polygons
-  centroids_hash = {} # to not triple polygons - each incident on 3 vertices
+  centroids = set()
   dual_tiles = []
   for vertex in vertices:
     star = get_star(vertex, patch)
@@ -420,9 +393,9 @@ def get_mesh(tiling_code:str) -> ArchimedeanMesh:
       # times-6 factor keeps coords as integers, and is enforced to stop
       # floating point errors creeping in, and so that centroid can be safely
       # used as dictionary key
-      if centroid not in centroids_hash and \
+      if centroid not in centroids and \
           is_in_parallelogram(vprod(1/6, centroid), tvec1, tvec2):
-        centroids_hash[centroid] = 1
+        centroids.add(centroid)
         tiles.append(face)
     if is_in_parallelogram(vertex, tvec1, tvec2):
       dual_tiles.append(get_dual_face(star, vertex))
