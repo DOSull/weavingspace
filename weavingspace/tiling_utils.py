@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import copy
 import itertools
+import math
 import re
 import string
 from collections import defaultdict
@@ -36,6 +37,7 @@ import pandas as pd
 import shapely.affinity as affine
 import shapely.geometry as geom
 import shapely.ops
+from shapely import line_interpolate_point
 from shapely.algorithms import polylabel
 
 if TYPE_CHECKING:
@@ -243,6 +245,62 @@ def get_interior_angles(shape:geom.Polygon) -> list[float]:
                 wrap_corners[1:-1],
                 wrap_corners[2:], strict = True)
   return [get_inner_angle(p1, p2, p3) for p1, p2, p3 in triples]
+
+
+def get_radially_sliced_polygon(
+    shape:geom.Polygon,
+    n_slices:int,
+    offset:float,
+  ) -> gpd.GeoSeries:
+  """Return a number of 'pie slices' of the supplied polygon as a GeoSeries.
+
+  Args:
+    shape (geom.Polygon): the polygon to slice up.
+    n_slices (int): the desired number of slices.
+    offset (float): a linearly scaled positional offset for the starting point
+      point of the slices. 0 is at the first vertex. 1 is halfway between that
+      and the next vertex. -1 is halfway between 0 and the previous vertex.
+
+  Returns:
+      gpd.GeoSeries: a set of slice polygons.
+
+  """
+  n_sides = len(shape.exterior.coords) - 1
+  if abs(offset) > 1:
+    offset = offset % 1
+  offset = (offset * n_sides / n_slices / 2
+            if n_slices >= n_sides
+            else offset / 2)
+  # the values in along are denominated in 'side counts' i.e. they run from
+  # 0 to the number of sides, with e.g., 2.5 halfway along the 3rd side
+  along = [n_sides * i / n_slices + offset for i in range(n_slices)]
+  along = [*along, n_sides + along[0]]
+  # the cut points
+  boundary = geom.LineString(shape.exterior.coords)
+  points = [line_interpolate_point(
+    boundary, (a % n_sides) / n_sides, normalized = True) for a in along]
+  # the corners of the original polygon
+  corners = get_corners(shape)
+  slices = []
+  centre = (shape.centroid.x, shape.centroid.y)
+  # now we iterate over the list of values in along and in points in parallel
+  # checking if any cut point has 'skipped' a corner when the integer part
+  # of the values from the along list will be different
+  for a1, a2, p1, p2 in zip(along[:-1],  along[1:],
+                           points[:-1], points[1:], strict = True):
+    if math.floor(a1) == math.floor(a2):
+      # two cut points on same polygon edge, so make the slice
+      slices.append(geom.Polygon([p1, p2, centre]))
+    else:
+      # there are one or more corners between the cut points so get them
+      skipped_corners = corners[math.ceil(a1):math.ceil(a2)]
+      # but discard any that are close to the cut points to avoid duplicates
+      skipped_corners = [
+        c for c in skipped_corners
+        if not (np.isclose(c.distance(p1), 0, rtol = 1e-6, atol = 1e-6)
+             or np.isclose(c.distance(p2), 0, rtol = 1e-6, atol = 1e-6))]
+      slices.append(geom.Polygon([p1, *skipped_corners, p2, centre]))
+  return gpd.GeoSeries(slices)
 
 
 def get_clean_polygon(

@@ -195,8 +195,8 @@ def _setup_cairo(unit:TileUnit) -> str|None:
 def _setup_regular_tile_unit(unit:TileUnit) -> str|None:
   if any(k not in unit.__dict__ for k in ["code"]):
     return ("""Regular tiling requires code parameter.""")
-  if "dual" not in unit.__dict__:
-    unit.__dict__["dual"] = False
+  if "option" not in unit.__dict__:
+    unit.__dict__["option"] = "base"
   return _regular_tilings._setup_tile_unit(unit)
 
 
@@ -224,7 +224,8 @@ def _setup_hex_slice(unit:TileUnit) -> str|None:
     return ("""Hex slice tiling requires both n and offset values
             to be supplied.""")
   hexagon = tiling_utils.get_regular_polygon(unit.spacing, 6)
-  slices = _get_radially_sliced_polygon(hexagon, unit.n, unit.offset)
+  # slices = _get_radially_sliced_polygon(hexagon, unit.n, unit.offset)
+  slices = tiling_utils.get_radially_sliced_polygon(hexagon, unit.n, unit.offset)
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:unit.n]},
     crs = unit.crs,
@@ -255,7 +256,8 @@ def _setup_square_slice(unit:TileUnit) -> str|None:
     return ("""Square slice tiling requires both n and offset values
             to be supplied.""")
   square = tiling_utils.get_regular_polygon(unit.spacing, 4)
-  slices = _get_radially_sliced_polygon(square, unit.n, unit.offset)
+  # slices = _get_radially_sliced_polygon(square, unit.n, unit.offset)
+  slices = tiling_utils.get_radially_sliced_polygon(square, unit.n, unit.offset)
   unit.tiles = gpd.GeoDataFrame(
     data = {"tile_id": list(TILE_IDS)[:unit.n]},
     crs = unit.crs,
@@ -263,59 +265,59 @@ def _setup_square_slice(unit:TileUnit) -> str|None:
   unit.setup_vectors((0, unit.spacing), (unit.spacing, 0))
   return None
 
-def _get_radially_sliced_polygon(
-    shape:geom.Polygon,
-    n_slices:int,
-    offset:float,
-  ) -> gpd.GeoSeries:
-  """Return a number of 'pie slices' of the supplied polygon as a GeoSeries.
+# def _get_radially_sliced_polygon(
+#     shape:geom.Polygon,
+#     n_slices:int,
+#     offset:float,
+#   ) -> gpd.GeoSeries:
+#   """Return a number of 'pie slices' of the supplied polygon as a GeoSeries.
 
-  Args:
-    shape (geom.Polygon): the polygon to slice up.
-    n_slices (int): the desired number of slices.
-    offset (float): a linearly scaled positional offset for the starting point
-      point of the slices. 0 is at the first vertex. 1 is halfway between that
-      and the next vertex. -1 is halfway between 0 and the previous vertex.
+#   Args:
+#     shape (geom.Polygon): the polygon to slice up.
+#     n_slices (int): the desired number of slices.
+#     offset (float): a linearly scaled positional offset for the starting point
+#       point of the slices. 0 is at the first vertex. 1 is halfway between that
+#       and the next vertex. -1 is halfway between 0 and the previous vertex.
 
-  Returns:
-      gpd.GeoSeries: a set of slice polygons.
+#   Returns:
+#       gpd.GeoSeries: a set of slice polygons.
 
-  """
-  n_sides = len(shape.exterior.coords) - 1
-  if abs(offset) > 1:
-    offset = offset % 1
-  offset = (offset * n_sides / n_slices / 2
-            if n_slices >= n_sides
-            else offset / 2)
-  # the values in along are denominated in 'side counts' i.e. they run from
-  # 0 to the number of sides, with e.g., 2.5 halfway along the 3rd side
-  along = [n_sides * i / n_slices + offset for i in range(n_slices)]
-  along = [*along, n_sides + along[0]]
-  # the cut points
-  boundary = geom.LineString(shape.exterior.coords)
-  points = [line_interpolate_point(
-    boundary, (a % n_sides) / n_sides, normalized = True) for a in along]
-  # the corners of the original polygon
-  corners = tiling_utils.get_corners(shape)
-  slices = []
-  # now we iterate over the list of values in along and in points in parallel
-  # checking if any cut point has 'skipped' a corner when the integer part
-  # of the values from the along list will be different
-  for a1, a2, p1, p2 in zip(along[:-1],  along[1:],
-                           points[:-1], points[1:], strict = True):
-    if math.floor(a1) == math.floor(a2):
-      # two cut points on same polygon edge, so make the slice
-      slices.append(geom.Polygon([p1, p2, (0, 0)]))
-    else:
-      # there are one or more corners between the cut points so get them
-      skipped_corners = corners[math.ceil(a1):math.ceil(a2)]
-      # but discard any that are close to the cut points to avoid duplicates
-      skipped_corners = [
-        c for c in skipped_corners
-        if not (np.isclose(c.distance(p1), 0, rtol = 1e-6, atol = 1e-6)
-             or np.isclose(c.distance(p2), 0, rtol = 1e-6, atol = 1e-6))]
-      slices.append(geom.Polygon([p1, *skipped_corners, p2, (0, 0)]))
-  return gpd.GeoSeries(slices)
+#   """
+#   n_sides = len(shape.exterior.coords) - 1
+#   if abs(offset) > 1:
+#     offset = offset % 1
+#   offset = (offset * n_sides / n_slices / 2
+#             if n_slices >= n_sides
+#             else offset / 2)
+#   # the values in along are denominated in 'side counts' i.e. they run from
+#   # 0 to the number of sides, with e.g., 2.5 halfway along the 3rd side
+#   along = [n_sides * i / n_slices + offset for i in range(n_slices)]
+#   along = [*along, n_sides + along[0]]
+#   # the cut points
+#   boundary = geom.LineString(shape.exterior.coords)
+#   points = [line_interpolate_point(
+#     boundary, (a % n_sides) / n_sides, normalized = True) for a in along]
+#   # the corners of the original polygon
+#   corners = tiling_utils.get_corners(shape)
+#   slices = []
+#   # now we iterate over the list of values in along and in points in parallel
+#   # checking if any cut point has 'skipped' a corner when the integer part
+#   # of the values from the along list will be different
+#   for a1, a2, p1, p2 in zip(along[:-1],  along[1:],
+#                            points[:-1], points[1:], strict = True):
+#     if math.floor(a1) == math.floor(a2):
+#       # two cut points on same polygon edge, so make the slice
+#       slices.append(geom.Polygon([p1, p2, (0, 0)]))
+#     else:
+#       # there are one or more corners between the cut points so get them
+#       skipped_corners = corners[math.ceil(a1):math.ceil(a2)]
+#       # but discard any that are close to the cut points to avoid duplicates
+#       skipped_corners = [
+#         c for c in skipped_corners
+#         if not (np.isclose(c.distance(p1), 0, rtol = 1e-6, atol = 1e-6)
+#              or np.isclose(c.distance(p2), 0, rtol = 1e-6, atol = 1e-6))]
+#       slices.append(geom.Polygon([p1, *skipped_corners, p2, (0, 0)]))
+#   return gpd.GeoSeries(slices)
 
 
 def _setup_stripes(unit:TileUnit) -> str|None:

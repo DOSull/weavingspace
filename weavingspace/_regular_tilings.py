@@ -28,8 +28,9 @@ import string
 from collections.abc import Iterable
 
 import geopandas as gpd
-import shapely.affinity as affine
 import shapely.geometry as geom
+
+from weavingspace import tiling_utils
 
 """Manually transcoded from javascript implementation of
 
@@ -43,6 +44,17 @@ model of tiling and what we're doing here!
 """
 
 num = int | float # convenience for cleaner typing
+
+
+class ArchimedeanMesh:
+  """Convenience class to store information about a tiling."""
+
+  def __init__(self):
+    self.tvec1 = []
+    self.tvec2 = []
+    self.tiles = []
+    self.dual_faces = []
+
 
 # read tile specs from supplied JSON
 # note that there are definitely duplicates
@@ -133,6 +145,21 @@ CENTROID_OFFSETS = {
 }
 
 
+def _get_finalised_unit(unit:"TileUnit",
+                        tiles:gpd.GeoSeries,
+                        mesh:ArchimedeanMesh) -> "TileUnit":
+  unit.tiles = gpd.GeoDataFrame(
+    geometry = gpd.GeoSeries(tiles), crs = unit.crs,
+    data = {"tile_id": TILE_IDS[:len(tiles)]})
+  unit.setup_vectors(base_to_point(mesh.tvec1), base_to_point(mesh.tvec2))
+  # v1, v2 = base_to_point(mesh.tvec1), base_to_point(mesh.tvec2)
+  # sf = unit.spacing / math.sqrt(area(v1, v2))
+  # dxdy = vprod(0.5, vsum(v1, v2))
+  # unit.tiles.geometry = unit.tiles.geometry.scale(sf, sf, origin = dxdy)
+  # unit.setup_vectors(vprod(sf, v1), vprod(sf, v2))
+  return unit
+
+
 def _setup_tile_unit(unit:"TileUnit") -> str|None:
   """Set elements in supplied tile unit by constructing mesh.
 
@@ -149,22 +176,88 @@ def _setup_tile_unit(unit:"TileUnit") -> str|None:
   mesh = get_mesh(unit.code)
   if isinstance(mesh, str):
     return mesh
-  if unit.dual is not None and unit.dual:
-    polys = gpd.GeoSeries(
-      [geom.Polygon([base_to_point(vprod(1/6, xy)) for xy in dual])
-       for dual in mesh.dual_tiles])
-  else:
-    polys = [geom.Polygon([base_to_point(xy) for xy in points])
-             for points in mesh.tiles]
-  unit.tiles = gpd.GeoDataFrame(
-    geometry = gpd.GeoSeries(polys), crs = unit.crs,
-    data = {"tile_id": TILE_IDS[:len(polys)]})
+  if unit.option is not None:
+    if unit.option.lower() in ("base", "composite"):
+      polys = [geom.Polygon([base_to_point(xy) for xy in points])
+               for points in mesh.tiles]
+      if unit.option.lower() == "base":
+        unit = _get_finalised_unit(unit, polys, mesh)
+      else: # 'composite' i.e., tiles overlaid with their dual
+        # turns out it's much easier to do this by pie-slicing regular polygons
+        # than making polygons and their dual polygons and intersecting them...
+        all_polys = []
+        for p in polys:
+          n = len(p.exterior.coords) - 1
+          slices = list(tiling_utils.get_radially_sliced_polygon(p, n, 1.0))
+          all_polys.extend(slices)
+        unit = _get_finalised_unit(unit, all_polys, mesh)
+    elif unit.option.lower() == "dual":
+      polys = [geom.Polygon([base_to_point(vprod(1/6, xy)) for xy in dual])
+               for dual in mesh.dual_tiles]
+      unit = _get_finalised_unit(unit, polys, mesh)
+    else:
+      return "Please specify 'base', 'dual' or 'composite' option."
   v1, v2 = base_to_point(mesh.tvec1), base_to_point(mesh.tvec2)
   sf = unit.spacing / math.sqrt(area(v1, v2))
   dxdy = vprod(0.5, vsum(v1, v2))
   unit.tiles.geometry = unit.tiles.geometry.scale(sf, sf, origin = dxdy)
   unit.setup_vectors(vprod(sf, v1), vprod(sf, v2))
   return None
+
+
+def _get_radially_sliced_polygon(
+    shape:geom.Polygon,
+    n_slices:int,
+    offset:float,
+  ) -> gpd.GeoSeries:
+  """Return a number of 'pie slices' of the supplied polygon as a GeoSeries.
+
+  Args:
+    shape (geom.Polygon): the polygon to slice up.
+    n_slices (int): the desired number of slices.
+    offset (float): a linearly scaled positional offset for the starting point
+      point of the slices. 0 is at the first vertex. 1 is halfway between that
+      and the next vertex. -1 is halfway between 0 and the previous vertex.
+
+  Returns:
+      gpd.GeoSeries: a set of slice polygons.
+
+  """
+  n_sides = len(shape.exterior.coords) - 1
+  if abs(offset) > 1:
+    offset = offset % 1
+  offset = (offset * n_sides / n_slices / 2
+            if n_slices >= n_sides
+            else offset / 2)
+  # the values in along are denominated in 'side counts' i.e. they run from
+  # 0 to the number of sides, with e.g., 2.5 halfway along the 3rd side
+  along = [n_sides * i / n_slices + offset for i in range(n_slices)]
+  along = [*along, n_sides + along[0]]
+  # the cut points
+  boundary = geom.LineString(shape.exterior.coords)
+  points = [line_interpolate_point(
+    boundary, (a % n_sides) / n_sides, normalized = True) for a in along]
+  # the corners of the original polygon
+  corners = tiling_utils.get_corners(shape)
+  slices = []
+  # now we iterate over the list of values in along and in points in parallel
+  # checking if any cut point has 'skipped' a corner when the integer part
+  # of the values from the along list will be different
+  for a1, a2, p1, p2 in zip(along[:-1],  along[1:],
+                           points[:-1], points[1:], strict = True):
+    if math.floor(a1) == math.floor(a2):
+      # two cut points on same polygon edge, so make the slice
+      slices.append(geom.Polygon([p1, p2, (0, 0)]))
+    else:
+      # there are one or more corners between the cut points so get them
+      skipped_corners = corners[math.ceil(a1):math.ceil(a2)]
+      # but discard any that are close to the cut points to avoid duplicates
+      skipped_corners = [
+        c for c in skipped_corners
+        if not (np.isclose(c.distance(p1), 0, rtol = 1e-6, atol = 1e-6)
+             or np.isclose(c.distance(p2), 0, rtol = 1e-6, atol = 1e-6))]
+      slices.append(geom.Polygon([p1, *skipped_corners, p2, (0, 0)]))
+  return slices
 
 
 def change_base(a:Iterable[num],
@@ -221,8 +314,8 @@ def get_patch(points:Iterable[Iterable[int]],
 
   """
   patch = set()
-  for k1 in range(n0, n1):
-    for k2 in range(n0, n1):
+  for k1 in range(n0, n1 + 1):
+    for k2 in range(n0, n1 + 1):
       for point in points:
         # coords are ints so are safe to add to a set
         hashcode = vsum(point, vprod(k1, t1), vprod(k2, t2))
@@ -354,16 +447,6 @@ def is_in_parallelogram(p:Iterable[int], t1:list[int], t2:list[int]) -> bool:
           (U[1] >= -EPS) and (U[1] < 1 - EPS))
 
 
-class ArchimedeanMesh:
-  """Convenience class to store information about a tiling."""
-
-  def __init__(self):
-    self.tvec1 = []
-    self.tvec2 = []
-    self.tiles = []
-    self.dual_faces = []
-
-
 def get_mesh(tiling_code:str) -> ArchimedeanMesh:
   """Build and return the tiling mesh from the specified code.
 
@@ -380,8 +463,9 @@ def get_mesh(tiling_code:str) -> ArchimedeanMesh:
     return get_488()
   tvec1 = Symbols[tiling_code]["T1"]
   tvec2 = Symbols[tiling_code]["T2"]
-  vertices = Symbols[tiling_code]["Seed"]
-  patch = get_patch(vertices, tvec1, tvec2)
+  seed = Symbols[tiling_code]["Seed"]
+  vertices = get_patch(seed, tvec1, tvec2, 0, 1)
+  patch = get_patch(seed, tvec1, tvec2, -1, 2)
   tiles = [] # tile polygons
   centroids = set()
   dual_tiles = []

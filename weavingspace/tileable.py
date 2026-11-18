@@ -510,6 +510,7 @@ class Tileable:
 
     """
     result = copy.deepcopy(self)
+    result.spacing = np.sqrt(xscale * yscale) * result.spacing
     result.tiles.geometry = self.tiles.geometry.scale(
       xscale, yscale, origin=(0, 0))
     if not independent_of_tiling:
