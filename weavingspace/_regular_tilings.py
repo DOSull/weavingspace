@@ -152,11 +152,6 @@ def _get_finalised_unit(unit:"TileUnit",
     geometry = gpd.GeoSeries(tiles), crs = unit.crs,
     data = {"tile_id": TILE_IDS[:len(tiles)]})
   unit.setup_vectors(base_to_point(mesh.tvec1), base_to_point(mesh.tvec2))
-  # v1, v2 = base_to_point(mesh.tvec1), base_to_point(mesh.tvec2)
-  # sf = unit.spacing / math.sqrt(area(v1, v2))
-  # dxdy = vprod(0.5, vsum(v1, v2))
-  # unit.tiles.geometry = unit.tiles.geometry.scale(sf, sf, origin = dxdy)
-  # unit.setup_vectors(vprod(sf, v1), vprod(sf, v2))
   return unit
 
 
@@ -176,27 +171,27 @@ def _setup_tile_unit(unit:"TileUnit") -> str|None:
   mesh = get_mesh(unit.code)
   if isinstance(mesh, str):
     return mesh
-  if unit.option is not None:
-    if unit.option.lower() in ("base", "composite"):
-      polys = [geom.Polygon([base_to_point(xy) for xy in points])
-               for points in mesh.tiles]
-      if unit.option.lower() == "base":
-        unit = _get_finalised_unit(unit, polys, mesh)
-      else: # 'composite' i.e., tiles overlaid with their dual
-        # turns out it's much easier to do this by pie-slicing regular polygons
-        # than making polygons and their dual polygons and intersecting them...
-        all_polys = []
-        for p in polys:
-          n = len(p.exterior.coords) - 1
-          slices = list(tiling_utils.get_radially_sliced_polygon(p, n, 1.0))
-          all_polys.extend(slices)
-        unit = _get_finalised_unit(unit, all_polys, mesh)
-    elif unit.option.lower() == "dual":
-      polys = [geom.Polygon([base_to_point(vprod(1/6, xy)) for xy in dual])
-               for dual in mesh.dual_tiles]
+  if (unit.option is None or 
+      unit.option.lower() not in ("base", "dual", "composite")):
+    return "Please specify 'base', 'dual' or 'composite' option."
+  if unit.option.lower() in ("base", "composite"):
+    polys = [geom.Polygon([base_to_point(xy) for xy in points])
+             for points in mesh.tiles]
+    if unit.option.lower() == "base":
       unit = _get_finalised_unit(unit, polys, mesh)
-    else:
-      return "Please specify 'base', 'dual' or 'composite' option."
+    else: # 'composite' i.e., tiles overlaid with their dual
+      # turns out it's much easier to do this by pie-slicing regular polygons
+      # than making polygons and their dual polygons and intersecting them...
+      all_polys = []
+      for p in polys:
+        n = len(p.exterior.coords) - 1
+        slices = list(tiling_utils.get_radially_sliced_polygon(p, n, 1.0))
+        all_polys.extend(slices)
+      unit = _get_finalised_unit(unit, all_polys, mesh)
+  else:
+    polys = [geom.Polygon([base_to_point(vprod(1/6, xy)) for xy in dual])
+             for dual in mesh.dual_tiles]
+    unit = _get_finalised_unit(unit, polys, mesh)
   v1, v2 = base_to_point(mesh.tvec1), base_to_point(mesh.tvec2)
   sf = unit.spacing / math.sqrt(area(v1, v2))
   dxdy = vprod(0.5, vsum(v1, v2))
