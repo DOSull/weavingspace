@@ -517,6 +517,8 @@ def get_incentre(shape:geom.Polygon) -> geom.Point:
   if is_regular_polygon(shape):
     return shape.centroid
   # else find the incentre
+  if not is_convex(shape):
+    return shape.convex_hull.centroid
   if not is_tangential(shape):
     return shape.centroid
   r = get_apothem(shape)

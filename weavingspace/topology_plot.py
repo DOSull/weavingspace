@@ -49,7 +49,7 @@ def plot(
     show_edges: bool = True,
     offset_edges: bool = True,
     show_edge_labels: bool = False,
-    # show_dual_tiles: bool = False,
+    show_dual_tiles: bool = False,
     ax: plt.Axes|None = None,
   ) -> plt.Axes:
   """Delegate plotting of requested elements and return plt.Axes.
@@ -90,8 +90,8 @@ def plot(
     _plot_vertex_labels(topo, ax, show_vertex_ids)
   if show_edge_labels or show_edges:
     _plot_edges(topo, ax, show_edges, show_edge_labels, dist, offset_edges)
-  # if show_dual_tiles:
-  #   _plot_dual_tiles(topo, ax, dist)
+  if show_dual_tiles:
+    _plot_dual_tiles(topo, ax, dist)
   ax.set_axis_off()
   return ax
 
@@ -197,12 +197,12 @@ def _plot_edges(
   return ax
 
 
-# def _plot_dual_tiles(
-#     topo: Topology,
-#     ax: plt.Axes,
-#     dist: float = 0.0,
-#   ) -> plt.Axes:
-#   gpd.GeoSeries(topo.dual_tiles).buffer(
-#     -dist / 4, join_style = "mitre", cap_style = "square").plot(
-#       ax = ax, fc = "g", alpha = 0.25)
-#   return ax
+def _plot_dual_tiles(
+    topo: Topology,
+    ax: plt.Axes,
+    dist: float = 0.0,
+  ) -> plt.Axes:
+  topo.dual_tiles.tiles.geometry.buffer(
+    -dist / 4, join_style = "mitre", cap_style = "square").plot(
+      ax = ax, fc = "g", alpha = 0.25)
+  return ax

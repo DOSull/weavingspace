@@ -334,6 +334,8 @@ class Vertex:
   """the containing Topology object."""
   geometry: geom.Point
   """point (geom.Point): point location of the vertex."""
+  dual_tile: geom.Polygon
+  dual_corners: list[tuple[float,float,None]]
   ID: int
   """integer (mostly but not necessarily in sequence) of vertex keyed into the
   points dictionary of the containing Topology."""
@@ -379,6 +381,8 @@ class Vertex:
     self.tiles = []
     self.neighbours = []
     self.element_type = "v"
+    self.dual_corners = set()
+    self.dual_tile = None
 
 
   def __str__(self) -> str:

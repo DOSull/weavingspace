@@ -139,6 +139,7 @@ class Topology:
 
   tileable: Tileable = None
   """Tileable on which the topology will be based."""
+  dual_tiles: Tileable = None
   tiles: dict[int, Tile]
   """dictionary of Tiles in the topology. Initially we use polygons returned by
   Tileable.get_local_patch to 'scaffold' building the topology and then throw
@@ -188,6 +189,7 @@ class Topology:
     self.points = {}
     self.edges = {}
     self.edges_by_corners = {}
+    self.debug = {}
     if unit is not None:
       self.tileable = unit
       self.n_tiles = self.tileable.tiles.shape[0]
@@ -198,11 +200,13 @@ class Topology:
       self._initialise_points_into_tiles(self.debug["vertices"])
       self._setup_vertex_tile_relations(self.debug["tiles"])
       self._tag_vertices()
+      self._setup_vertex_dual_tiles()
       self._setup_edges(self.debug["edges"])
       self._cleanup_after_initialisation()
       self._check_rotations(self.debug["rotations"])
       self._check_reflections(self.debug["reflections"])
       self._label_elements()
+      self._setup_dual_tiles()
 
 
   def __str__(self) -> str:
@@ -271,6 +275,8 @@ class Topology:
     labels = [L for tf, L in zip(which_shapes, labels, strict = True) if tf]
     ids = [i for tf, i in zip(which_shapes, ids, strict = True) if tf]
     for i, shape, label in (zip(ids, shapes, labels, strict = True)):
+      centre = tiling_utils.get_incentre(shape)
+      centre = (round(centre.x, 5), round(centre.y, 5))
       tile = Tile(self, i, label) # initialise an empty Tile
       self.tiles[tile.ID] = tile
       corners = tiling_utils.get_corners(shape, repeat_first = False)
@@ -282,9 +288,11 @@ class Topology:
               print(f"Adding existing Vertex {v} to Tile {i}")
             tile.corners.append(v.ID)
             prev_vertex = v
+            v.dual_corners.add(centre)
             break
         if prev_vertex is None:
           v = self.add_vertex(c)
+          v.dual_corners.add(centre)
           tile.corners.append(v.ID)
           if debug > 1:
             print(f"Adding new Vertex {v} to Tile {i}")
@@ -333,6 +341,9 @@ class Topology:
         for (v1, v2) in itertools.pairwise(all_points):
           self.points[v1].add_tile(tile.ID)
           self.points[v1].add_neighbour(v2)
+          c = tiling_utils.get_incentre(shape)
+          c = (round(c.x, 5), round(c.y, 5))
+          self.points[v1].dual_corners.add(c)
           if debug > 2:
             print(f"Adding Tile {tile.ID}, neighbour Vertex{v2} to Vertex {v1}")
         corners.extend(all_points[:-1])
@@ -345,6 +356,14 @@ class Topology:
   def _tag_vertices(self) -> None:
     for v in self.points.values():
       v.is_tiling_vertex = len(v.neighbours) > 2
+
+
+  def _setup_vertex_dual_tiles(self) -> None:
+    for v in self.points.values():
+      if len(v.dual_corners) > 2:
+        dual_corners = tiling_utils._sort_cw(
+          [[*c, None] for c in v.dual_corners])
+        v.dual_tile = geom.Polygon([c[:2] for c in dual_corners])
 
 
   def _setup_edges(self, debug:int = 0) -> None:
@@ -776,6 +795,16 @@ class Topology:
     self.edges[e.ID] = e
     self.edges_by_corners[e.corners] = e
     return e
+
+
+  def _setup_dual_tiles(self):
+    self.dual_tiles = copy.deepcopy(self.tileable)
+    dual_tiles = [v.dual_tile for v in self.points.values()
+                  if v.dual_tile is not None]
+    self.dual_tiles.tiles = gpd.GeoDataFrame(
+      geometry = gpd.GeoSeries(dual_tiles),
+      data = {"tile_id": tiling_utils.TILE_IDS[:len(dual_tiles)]})
+    self.dual_tiles._setup_regularised_prototile(True)
 
 
   def transform_geometry(
