@@ -710,13 +710,11 @@ class Topology:
 
 
   def _label_vertices(self) -> None:
-    # compile counts of how many of each transitivity class there are
-    # transitivity_class_counts = defaultdict(int)
     for i, orbit in enumerate(self.vertex_transitivity_classes):
       for element_id in orbit:
         self.points[int(element_id[1:])].transitivity_class = LABELS[i]
-        # transitivity_class_counts[LABELS[i]] += 1
-    self._setup_dual_tiles() # transitivity_class_counts)
+    # generate the dual based on the vertices assigned a class so far
+    self._setup_dual_tiles()
     # then ensure all vertices are assigned a transitivity class
     for v in self.points.values():
       if v.transitivity_class is None:
@@ -815,14 +813,7 @@ class Topology:
     return e
 
 
-  def _setup_dual_tiles(self, class_counts:defaultdict[int] = None):
-    # vs = sorted(self.points.values(), key = lambda x: sum(x.centre))
-    # dual_tiles = []
-    # counts = defaultdict(int)
-    # for v in vs:
-    #   if counts[v.transitivity_class] < class_counts[v.transitivity_class]:
-    #     dual_tiles.append(v.dual_tile)
-    #     counts[v.transitivity_class] += 1
+  def _setup_dual_tiles(self):
     self.dual_tiles = copy.deepcopy(self.tileable)
     dual_tiles = [v.dual_tile for v in self.points.values()
                   if v.dual_tile is not None and
