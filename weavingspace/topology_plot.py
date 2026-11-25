@@ -191,7 +191,7 @@ def _plot_edges(
   else:
     edges = topo._get_edge_geoms().geometry
   if show_edge_labels:
-    for ls, e in zip(edges, topo.edges.values(), strict = True):
+    for e in topo.edges.values():
       ax.annotate(e.transitivity_class, xy = e.centre, color = "k",
                   ha = "center", va = "center", fontsize = "x-large")
   return ax
@@ -202,6 +202,17 @@ def _plot_dual_tiles(
     ax: plt.Axes,
     dist: float = 0.0,
   ) -> plt.Axes:
+  """Plot dual tiles of Topology's tiling.
+
+  Args:
+    topo (Topology): topology object.
+    ax (plt.Axes): Axes on which to plot.
+    dist (float): distance to inset the dual tiles, so you can see them.
+
+  Returns:
+    plt.Axes: the plot Axes.
+
+  """
   topo.dual_tiles.tiles.geometry.buffer(
     -dist / 4, join_style = "mitre", cap_style = "square").plot(
       ax = ax, fc = "g", alpha = 0.25)

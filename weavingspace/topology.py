@@ -178,7 +178,8 @@ class Topology:
     """Class constructor.
 
     Initialisation by Topology(None) allows for step-by-step construction for
-    debugging.
+    debugging. The order of initialisation steps is obvious enough, but also
+    fragile to changes, so take care before considering any changes.
 
     Args:
       unit (Tileable): Tileable whose topology is required.
@@ -200,13 +201,14 @@ class Topology:
       self._initialise_points_into_tiles(self.debug["vertices"])
       self._setup_vertex_tile_relations(self.debug["tiles"])
       self._tag_vertices()
+      # do next step before any relabelling of vertices and tiles, so raw
+      # geometric coordinates of tile centres are still available
       self._setup_vertex_dual_tiles()
       self._setup_edges(self.debug["edges"])
       self._cleanup_after_initialisation()
       self._check_rotations(self.debug["rotations"])
       self._check_reflections(self.debug["reflections"])
       self._label_elements()
-      self._setup_dual_tiles()
 
 
   def __str__(self) -> str:
@@ -276,21 +278,21 @@ class Topology:
     ids = [i for tf, i in zip(which_shapes, ids, strict = True) if tf]
     for i, shape, label in (zip(ids, shapes, labels, strict = True)):
       centre = tiling_utils.get_incentre(shape)
-      centre = (round(centre.x, 5), round(centre.y, 5))
+      centre = (round(centre.x, 5), round(centre.y, 5)) # so it is hashable
       tile = Tile(self, i, label) # initialise an empty Tile
       self.tiles[tile.ID] = tile
       corners = tiling_utils.get_corners(shape, repeat_first = False)
       for c in corners:
-        prev_vertex = None
+        existing_vertex = False
         for v in self.points.values():
           if c.distance(v.geometry) <= 2 * tiling_utils.RESOLUTION:
             if debug > 1:
               print(f"Adding existing Vertex {v} to Tile {i}")
-            tile.corners.append(v.ID)
-            prev_vertex = v
             v.dual_corners.add(centre)
+            tile.corners.append(v.ID)
+            existing_vertex = True
             break
-        if prev_vertex is None:
+        if not existing_vertex:
           v = self.add_vertex(c)
           v.dual_corners.add(centre)
           tile.corners.append(v.ID)
@@ -354,16 +356,16 @@ class Topology:
 
 
   def _tag_vertices(self) -> None:
+    """Tag vertices known to be tiling vertices (not just corners) as such."""
     for v in self.points.values():
       v.is_tiling_vertex = len(v.neighbours) > 2
 
 
   def _setup_vertex_dual_tiles(self) -> None:
+    """Set dual tiles of the tiling vertices."""
     for v in self.points.values():
-      if len(v.dual_corners) > 2:
-        dual_corners = tiling_utils._sort_cw(
-          [[*c, None] for c in v.dual_corners])
-        v.dual_tile = geom.Polygon([c[:2] for c in dual_corners])
+      if v.is_tiling_vertex:
+        v._set_dual_tile()
 
 
   def _setup_edges(self, debug:int = 0) -> None:
@@ -402,7 +404,7 @@ class Topology:
     # finding ints in lists is much faster than finding Vertex objects
     # hence we use lists of IDs not Vertex objects
     if len(vertices) > 1:
-      for v1, v2 in zip(vertices, vertices[1:] + vertices[:1], strict = True):
+      for v1, v2 in zip(vertices, [*vertices[1:], *vertices[:1]], strict = True):
         corners = tuple(c for c in tile.get_corner_IDs_between(v1.ID, v2.ID))
         if debug > 2:
           print(f"Checking for edge {corners=}")
@@ -415,12 +417,11 @@ class Topology:
             e = self.edges_by_corners[r_corners]
             e.left_tile = tile.ID
             if debug > 2:
-              print(f"FOUND reverse edge {r_corners} left tile={tile.ID}")
-              print(f"right.tile={e.right_tile} {e.left_tile==e.right_tile}")
+              print(f"FOUND reverse edge {r_corners} left={tile.ID} right={e.right_tile}")
             tile.edges.append(e.ID)
           else:
             if debug > 2:
-              print(f"Adding new_edge {corners} to Tile {tile.ID}")
+              print(f"Adding new_edge {corners} to Tile {tile.ID} right={tile.ID}")
             e = self.add_edge(corners)
             e.right_tile = tile.ID
             tile.edges.append(e.ID)
@@ -443,27 +444,29 @@ class Topology:
     # relabelling is easier to reason about if we 'over-relabel' even if we
     # are going to dispose of some of these elements a bit later...
     # relabel elements in tiles
-    for t in self.tiles.values():
-      # only relabel tiles we are keeping because some member edges
-      # may not have lookups if they clashed with a vertex or tile
-      if self.n_tiles <= t.ID:
-        continue
-      t.corners = [v_lookup[v] for v in t.corners]
-      t.edges = [e_lookup[e] for e in t.edges]
-    # relabel elements in vertices
-    for v in self.points.values():
-      v.neighbours = [v_lookup[v] for v in v.neighbours]
-      v.tiles = [t_lookup[t] for t in v.tiles]
-    # relabel elements in edges
-    for e in self.edges.values():
-      e.left_tile = None if e.left_tile is None else t_lookup[e.left_tile]
-      e.right_tile = None if e.right_tile is None else t_lookup[e.right_tile]
-      e.corners = tuple(v_lookup[v] for v in e.corners)
-      e.vertices = tuple(v_lookup[v] for v in e.vertices)
+    # for t in self.tiles.values():
+    #   # only relabel tiles we are keeping because some member edges
+    #   # may not have lookups if they clashed with a vertex or tile
+    #   if self.n_tiles <= t.ID:
+    #     continue
+    #   t.corners = [v_lookup[v] for v in t.corners]
+    #   t.edges = [e_lookup[e] for e in t.edges]
+    # # relabel elements in vertices
+    # for v in self.points.values():
+    #   v.neighbours = [v_lookup[v] for v in v.neighbours]
+    #   v.tiles = [t_lookup[t] for t in v.tiles]
+    # # relabel elements in edges
+    # for e in self.edges.values():
+    #   e.left_tile = None if e.left_tile is None else t_lookup[e.left_tile]
+    #   e.right_tile = None if e.right_tile is None else t_lookup[e.right_tile]
+    #   e.corners = tuple(v_lookup[v] for v in e.corners)
+    #   e.vertices = tuple(v_lookup[v] for v in e.vertices)
     # now drop the duplicates
     self.tiles = {t.ID: t for t in uniques if isinstance(t, Tile)}
-    self.points = {v.ID: v for v in uniques if isinstance(v, Vertex)}
-    self.edges = {e.ID: e for e in uniques if isinstance(e, Edge)}
+    # self.points = {v.ID: v for v in uniques if isinstance(v, Vertex)}
+    self.points = {v.ID: v for v in self.vertices_in_tiles(self.tiles)}
+    # self.edges = {e.ID: e for e in uniques if isinstance(e, Edge)}
+    self.edges = {e.ID: e for e in self.edges_in_tiles(self.tiles)}
     # and build checkpoints dictionary from what's left
     self.check_points = {}
     self._add_check_points(self.points, "v")
@@ -584,7 +587,7 @@ class Topology:
         if debug > 2:
           print(f"FOUND {angle * 180/np.pi:.1f} rotation in {centre.id}")
         new_isometries.add(Isometry("Rotation", angle, centre.xy))
-        # break # we only need to find one
+        break # we only need to find one
     if len(new_isometries) > 0:
       self.isometries = self.isometries | new_isometries
       if debug > 1:
@@ -639,7 +642,7 @@ class Topology:
           if debug > 2:
             print(f"FOUND reflection in {centre.id} {mirror * 180/np.pi:.1f}")
           new_isometries.add(Isometry("Reflection", mirror, centre.xy))
-          # break
+          break
       if len(new_isometries) > 0:
         self.isometries = self.isometries | new_isometries
         if debug > 1:
@@ -669,7 +672,6 @@ class Topology:
     e_mirrors_perp = [b + 90 for b in e_mirrors_parallel]
     e_mirrors_parallel = {float(round(((a + 360) % 180) * np.pi / 180, 5))
                           for a in e_mirrors_parallel}
-    e_mirrors_perp = [e.get_bearing() + 90 for e in self.edges.values()]
     e_mirrors_perp = {float(round(((a + 360) % 180) * np.pi / 180, 5))
                       for a in e_mirrors_perp}
     return t_mirrors.intersection(e_mirrors_perp).union(e_mirrors_parallel)
@@ -708,15 +710,31 @@ class Topology:
 
 
   def _label_vertices(self) -> None:
+    # compile counts of how many of each transitivity class there are
+    # transitivity_class_counts = defaultdict(int)
     for i, orbit in enumerate(self.vertex_transitivity_classes):
       for element_id in orbit:
         self.points[int(element_id[1:])].transitivity_class = LABELS[i]
+        # transitivity_class_counts[LABELS[i]] += 1
+    self._setup_dual_tiles() # transitivity_class_counts)
+    # then ensure all vertices are assigned a transitivity class
+    for v in self.points.values():
+      if v.transitivity_class is None:
+        matching_cp = self.check_points[self.reducer(v.centre)]
+        v.transitivity_class = self.points[
+          int(matching_cp.id[1:])].transitivity_class
 
 
   def _label_edges(self) -> None:
     for i, orbit in enumerate(self.edge_transitivity_classes):
       for element_id in orbit:
         self.edges[int(element_id[1:])].transitivity_class = labels[i]
+    # ensure all edges are assigned a transitivity class
+    for e in self.edges.values():
+      if e.transitivity_class is None:
+        matching_cp = self.check_points[self.reducer(e.centre)]
+        e.transitivity_class = self.edges[
+          int(matching_cp.id[1:])].transitivity_class
 
 
   def _label_tiles(self) -> None:
@@ -797,10 +815,18 @@ class Topology:
     return e
 
 
-  def _setup_dual_tiles(self):
+  def _setup_dual_tiles(self, class_counts:defaultdict[int] = None):
+    # vs = sorted(self.points.values(), key = lambda x: sum(x.centre))
+    # dual_tiles = []
+    # counts = defaultdict(int)
+    # for v in vs:
+    #   if counts[v.transitivity_class] < class_counts[v.transitivity_class]:
+    #     dual_tiles.append(v.dual_tile)
+    #     counts[v.transitivity_class] += 1
     self.dual_tiles = copy.deepcopy(self.tileable)
     dual_tiles = [v.dual_tile for v in self.points.values()
-                  if v.dual_tile is not None]
+                  if v.dual_tile is not None and
+                  v.transitivity_class is not None]
     self.dual_tiles.tiles = gpd.GeoDataFrame(
       geometry = gpd.GeoSeries(dual_tiles),
       data = {"tile_id": tiling_utils.TILE_IDS[:len(dual_tiles)]})
@@ -813,7 +839,7 @@ class Topology:
       apply_to_tiles: bool,
       selector: str,
       transform_type: str,
-      **kwargs: dict[str:float]) -> Topology:
+      **kwargs: dict[str:float]) -> Tileable:
     r"""Get a new Topology by applying specified transformation.
 
     A transformation specified by `transform_type` and keyword arguments is
@@ -866,27 +892,27 @@ class Topology:
     match transform_type:
       case "zigzag_edge":
         for e in topo.edges.values():
-          if e.label in selector:
+          if e.transitivity_class is not None and e.transitivity_class in selector:
             topo.zigzag_edge(e, **transform_args)
       case "rotate_edge":
         for e in topo.edges.values():
-          if e.label in selector:
+          if e.transitivity_class in selector:
             topo.rotate_edge(e, **transform_args)
       case "scale_edge":
         for e in topo.edges.values():
-          if e.label in selector:
+          if e.transitivity_class in selector:
             topo.scale_edge(e, **transform_args)
       case "push_vertex":
         pushes = {}
         for v in topo.vertices_in_tiles(topo.tiles[:topo.n_tiles]):
-          if v.label in selector:
+          if v.transitivity_class in selector:
             pushes[v.ID] = topo.push_vertex(v, **transform_args)
         for ID, (dx, dy) in pushes.items():
           for v in [v for v in topo.points.values() if v.ID == ID]:
             v.geometry = affine.translate(v.geometry, dx, dy)
       case "nudge_vertex":
          for v in topo.points.values():
-          if v.label in selector:
+          if v.transitivity_class in selector:
             topo.nudge_vertex(v, **transform_args)
     if apply_to_tiles:
       for t in topo.tiles.values():
@@ -944,7 +970,7 @@ class Topology:
     corners = []
     for i, (v0, v1) in enumerate(
         zip(edge.get_corners()[:-1], edge.get_corners()[1:], strict = True)):
-      if n % 2 == 1 and v0.label != start:
+      if n % 2 == 1 and v0.transitivity_class != start:
         h = -h
       ls = self.zigzag_between_points(v0.geometry, v1.geometry, n, h, smoothness)
       new_IDs = [self.add_vertex(geom.Point(xy)).ID for xy in ls.coords[1:-1]]
@@ -962,7 +988,7 @@ class Topology:
       h: float = 1.0,
       smoothness: int = 0,
     ) -> geom.LineString:
-    """Return a zig zag line optionally smoothed as a spline between two points.
+    """Return a zig zag line between two points.
 
     Args:
       p0 (geom.Point): start point.
@@ -970,7 +996,7 @@ class Topology:
       n (int): number of zig zags.
       h (float, optional): amplitude of zig zags relative to distance between
         points. Defaults to 1.0.
-      smoothness (int, optional): number of spline smoothed points to add. If
+      smoothness (int, optional): number of additional points to add. If
         set to 0 a straight line zig zag is produced. Defaults to 0.
 
     Returns:
@@ -978,7 +1004,7 @@ class Topology:
 
     """
     r = p0.distance(p1)
-    xs = np.linspace(0, n * np.pi, (n + smoothness) * 2 + 1, endpoint = True)
+    xs = np.linspace(0, n * np.pi, 2 + n + (n + 1) * smoothness, endpoint = True)
     ys = [np.sin(x) for x in xs]
 
     sfx = 1 / max(xs) * r
@@ -1012,9 +1038,9 @@ class Topology:
     """
     v0, v1 = edge.get_vertices()
     ls = geom.LineString([v0.geometry, v1.geometry])
-    if v0.label == centre:
+    if v0.transitivity_class == centre:
       c = v0.geometry
-    elif v1.label == centre:
+    elif v1.transitivity_class == centre:
       c = v1.geometry
     else:
       c = ls.centroid
@@ -1091,8 +1117,6 @@ class Topology:
     return gpd.GeoDataFrame(
       data = {"transitivity_class": [v.transitivity_class
                                     for v in self.points.values()],
-              "label": [v.label for v in self.points.values()
-                        if v.is_tiling_vertex],
               "is_tiling_vertex": [v.is_tiling_vertex
                                   for v in self.points.values()]},
       geometry = gpd.GeoSeries([v.geometry for v in self.points.values()]))
@@ -1109,9 +1133,7 @@ class Topology:
     return gpd.GeoDataFrame(
       data = {"transitivity_class": [v.transitivity_class
                                     for v in self.points.values()
-                                    if v.is_tiling_vertex],
-              "label": [v.label for v in self.points.values()
-                        if v.is_tiling_vertex]},
+                                    if v.is_tiling_vertex]},
       geometry = gpd.GeoSeries([v.geometry for v in self.points.values()
                                 if v.is_tiling_vertex]))
 
@@ -1128,7 +1150,6 @@ class Topology:
     """
     return gpd.GeoDataFrame(
       data = {"transitivity_class": [e.transitivity_class
-                                    for e in self.edges.values()],
-              "label": [e.label for e in self.edges.values()]},
+                                    for e in self.edges.values()]},
       geometry = gpd.GeoSeries([e.geometry.parallel_offset(offset)
                                 for e in self.edges.values()]))

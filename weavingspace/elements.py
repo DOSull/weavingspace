@@ -68,6 +68,7 @@ class Tile:
   These boolean flags are True if the corresponding Edge is clockwise, False if
   counter-clockwise."""
   species: tuple[float]
+  """"""
   label: str
   """tile_id label from the tileable source"""
   geometry: geom.Polygon = None
@@ -87,11 +88,8 @@ class Tile:
   by the corners of neighbouring tiles."""
   centre: tuple[float]
   """a point centre for the Tile."""
-  shape_group: int = None
-  """the tile shape group of this tile in its containing Topology."""
   transitivity_class: int = None
   """the tile transitivity class of this tile its containing Topology"""
-  centre: geom.Point
 
 
   def __init__(self, topology: Topology, ID: int, label: str) -> None:
@@ -136,7 +134,7 @@ class Tile:
     n_sides = self.get_neighbour_side_counts()
     code1 = self.get_code(angles, lengths)
     s = Symmetries(self.geometry)
-    if s.get_symmetry_group_code()[0] == "D":
+    if s.get_symmetry_group_code()[0] == "D": # reflection symmetric
       code2 = code1
     else:
       code2 = self.get_code(angles[::-1], 
@@ -145,9 +143,9 @@ class Tile:
 
 
   def get_code(self, 
-               angles:list[float], 
+               angles:list[float],
                lengths:list[float]) -> tuple[float]:
-    """Return a hashable code for polygon based on angles, lengths, n_sides."""
+    """Return a hashable code for polygon based on angles, lengths."""
     pairs = self.cyclic_sort_by_first(angles, lengths)
     return list(itertools.chain.from_iterable(pairs))
 
@@ -163,7 +161,7 @@ class Tile:
 
   def get_neighbour_side_counts(self) -> list[int]:
     neighbours = [e.left_tile if e.left_tile != self.ID else e.right_tile
-            for e in self.get_edges()]
+                  for e in self.get_edges()]
     return sorted(
       len(self.topology.tiles[t].corners) if t is not None else 0
       for t in neighbours)
@@ -333,9 +331,11 @@ class Vertex:
   topology: Topology
   """the containing Topology object."""
   geometry: geom.Point
-  """point (geom.Point): point location of the vertex."""
-  dual_tile: geom.Polygon
+  """point location of the vertex."""
   dual_corners: list[tuple[float,float,None]]
+  """corners of dual tile - found one by one hence storage is required."""
+  dual_tile: geom.Polygon
+  """tile centred on this vertex in dual tiling."""
   ID: int
   """integer (mostly but not necessarily in sequence) of vertex keyed into the
   points dictionary of the containing Topology."""
@@ -348,9 +348,6 @@ class Vertex:
   species: tuple[float]
   transitivity_class: int = None
   """transitivity class of the vertex under symmetries of the tiling"""
-  label: str = ""
-  """the (upper case letter) label of the vertex under the symmetries of the
-  tiling."""
   is_tiling_vertex: bool = True
   """is_tiling_vertex (bool): True if this is a tiling vertex, rather than a
   tile corner. E.g., A below is a corner, not a tiling vertex. B is a tiling
@@ -364,6 +361,8 @@ class Vertex:
           |   |
           +---+"""
   centre: tuple[float]
+  """a centre (x, y) location of the vertex."""
+
 
   def __init__(self, topology: Topology, point: geom.Point, ID: int) -> None:
     """Class constructor.
@@ -399,20 +398,42 @@ class Vertex:
     return str(self)
 
 
-  def _set_species(self) -> int:
+  def _set_species(self) -> tuple[tuple[float],tuple[float]]:
+    """Set a unique species signature used in symmetry checking.
+
+    Two sequences of angles between incident edges, sorted lexicographically are
+    returned one the reverse of the order so that reflection symmetries can be
+    checked. For example, if a vertex has sequence of angles 60, 30, 90, 90, 90,
+    the two sequences will be (30, 90, 90, 90, 60) and (30, 60, 90, 90, 90).
+
+    Returns:
+      tuple[tuple[float],tuple[float]]: two sequences of floats.
+
+    """
     self.clockwise_order_incident_tiles()
     species1 = [float(round(t.angle_at(self.ID), 3))
                 for t in self.get_tiles()]
     species2 = [float(round(t.angle_at(self.ID), 3))
                 for t in self.get_tiles()[::-1]]
-    # species.sort()
-    # self.species = tuple(species)
     species1 = self._cyclic_sort(species1)
     species2 = self._cyclic_sort(species2)
     self.species = (species1, species2)
 
 
   def _cyclic_sort(self, x:list[float]) -> tuple[float]:
+    """Return cyclic sorted floats.
+
+    Double up the supplied list, take sequences of same length as supplied list,
+    and return lexicographically ordered first one. E.g., 43343 -> 4334343343,
+    and 33434 will emerge as first if we take 5 item subsequences.
+
+    Args:
+      x (list[float]): list to sort.
+
+    Returns:
+      tuple[float]: list sorted as described.
+
+    """
     y = [tuple((x + x)[i:i+len(x)]) for i in range(len(x))]
     y.sort()
     return y[0]
@@ -473,14 +494,14 @@ class Vertex:
 
   def _order_of_pts_cw_around_centre(
       self,
-      pts: list[geom.Point],
-      centre: geom.Point,
+      pts: list[tuple[float,float]],
+      centre: tuple[float,float],
     ) -> list[int]:
     """Return order of points clockwise relative to centre point.
 
     Args:
-      pts (list[geom.Point]): list of points to order.
-      centre (geom.Point): centre relative to which CW order is determined.
+      pts (list[tuple[float,float]]): list of points to order.
+      centre (tuple[float,float]): centre relative to which order is determined.
 
     Returns:
       list[int]: list of indices of reordered points.
@@ -493,8 +514,20 @@ class Vertex:
     return [i for angle, i in sorted(d.items(), reverse=True)]
 
 
-  def set_centre(self) -> tuple[float]:
+  def set_centre(self) -> None:
+    """Set a centre (x, y) tuple."""
     self.centre = (self.geometry.x, self.geometry.y)
+
+
+  def _set_dual_tile(self):
+    """Set dual tile polygon for this vertex.
+
+    Assumes that dual_corners set of corners has already been set, and sorts
+    that into clockwise order before creating a geom.Polygon tile.
+    """
+    corners = list(self.dual_corners)
+    order = self._order_of_pts_cw_around_centre(corners, self.centre)
+    self.dual_tile = geom.Polygon([corners[i] for i in order])
 
 
 class Edge:
@@ -520,11 +553,9 @@ class Edge:
   species: int # pending something better
   transitivity_class: int = None
   """transitivity class of the edge under symmetries of the tiling"""
-  label: str = ""
-  """the (lower case letter) label of the edge under the symmetries of the
-  tiling."""
   centre: tuple[float]
   geometry: geom.LineString
+
 
   def __init__(self, topology:Topology, corners:list[int]) -> None:
     """Class constructor.

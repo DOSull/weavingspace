@@ -399,8 +399,8 @@ class Tileable:
     if not include_0:  # throw away the identity vector
       vecs.pop((0, 0, 0) if three_vecs else (0, 0))
     ids, tiles = [], []
-    # we need to add the translated prototiles in order of their distance from
-    # tile 0, esp. in the square case, i.e. something like this:
+    # we need to add the translated prototiles in order of their (Manhattan)
+    # distance from tile 0, esp. in the square case, i.e. something like this:
     #
     #      5 4 3 4 5
     #      4 2 1 2 4
@@ -410,8 +410,8 @@ class Tileable:
     #
     # this is important for topology detection, where filtering back to the
     # local patch of radius 1 is simplified if prototiles have been added in
-    # this order. We use the vector index tuples not the euclidean distances
-    # because this is more resistant to odd effects for non-convex tiles
+    # this order. We use vector index tuples not euclidean distances because
+    # this is more robust to odd effects for non-convex tiles
     extent = self.get_prototile_from_vectors().loc[0, "geometry"]
     extent = affine.scale(extent,
                           2 * r + tiling_utils.RESOLUTION,

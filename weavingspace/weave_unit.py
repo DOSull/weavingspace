@@ -94,8 +94,8 @@ class WeaveUnit(Tileable):
   def _setup_regularised_prototile(self, override: bool = True) -> None:
     """Set up regularised prototile fully containing all tile elements.
 
-    The work is carried out by the two methods  that follow _regularise_tiles()
-    and _merge_fragments().
+    The work is carried out by Tileable._regularise_tiles() followed by some
+    cleanup.
     """
     self._regularise_tiles()
     # it's prudent to do some cleanup given all the manipulation of geometries
