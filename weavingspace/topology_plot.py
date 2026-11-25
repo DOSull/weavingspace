@@ -213,7 +213,8 @@ def _plot_dual_tiles(
     plt.Axes: the plot Axes.
 
   """
-  topo.dual_tiles.tiles.geometry.buffer(
+  dual = topo.get_dual_tile_unit()
+  dual.tiles.geometry.buffer(
     -dist / 4, join_style = "mitre", cap_style = "square").plot(
       ax = ax, fc = "g", alpha = 0.25)
   return ax

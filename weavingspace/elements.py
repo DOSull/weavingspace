@@ -519,15 +519,17 @@ class Vertex:
     self.centre = (self.geometry.x, self.geometry.y)
 
 
-  def _set_dual_tile(self):
+  def get_dual_tile(self) -> geom.Polygon|None:
     """Set dual tile polygon for this vertex.
 
     Assumes that dual_corners set of corners has already been set, and sorts
     that into clockwise order before creating a geom.Polygon tile.
     """
+    if not self.is_tiling_vertex:
+      return None
     corners = list(self.dual_corners)
     order = self._order_of_pts_cw_around_centre(corners, self.centre)
-    self.dual_tile = geom.Polygon([corners[i] for i in order])
+    return geom.Polygon([corners[i] for i in order])
 
 
 class Edge:

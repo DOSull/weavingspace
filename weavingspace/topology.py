@@ -139,7 +139,6 @@ class Topology:
 
   tileable: Tileable = None
   """Tileable on which the topology will be based."""
-  dual_tiles: Tileable = None
   tiles: dict[int, Tile]
   """dictionary of Tiles in the topology. Initially we use polygons returned by
   Tileable.get_local_patch to 'scaffold' building the topology and then throw
@@ -149,6 +148,8 @@ class Topology:
   points: dict[int, Vertex]
   """dictionary of all points (vertices and corners) in the tiling, keyed by
   Vertex ID"""
+  dual_centres: list[int]
+  """list of IDs of vertices that can yield a dual tiling."""
   edges: dict[int, Edge]
   """dictionary of tiling edges, keyed by Edge ID"""
   edges_by_corners: dict[tuple[int,...], Edge]
@@ -201,9 +202,6 @@ class Topology:
       self._initialise_points_into_tiles(self.debug["vertices"])
       self._setup_vertex_tile_relations(self.debug["tiles"])
       self._tag_vertices()
-      # do next step before any relabelling of vertices and tiles, so raw
-      # geometric coordinates of tile centres are still available
-      self._setup_vertex_dual_tiles()
       self._setup_edges(self.debug["edges"])
       self._cleanup_after_initialisation()
       self._check_rotations(self.debug["rotations"])
@@ -250,6 +248,14 @@ class Topology:
       return (float(round(fraction[0], max(6 - scale, 0))),
               float(round(fraction[1], max(6 - scale, 0))))
     self.reducer = reducer
+
+
+  def _get_raw_reducer(self) -> Callable:
+    basis = np.transpose(np.array(
+      self.tileable.get_vectors()[:2], dtype = float))
+    def raw_reducer(pt:tuple[float]) -> tuple[float]:
+      return np.linalg.inv(basis) @ np.array([pt[0], pt[1]], dtype = float)
+    return raw_reducer
 
 
   def _initialise_points_into_tiles(self, debug:int = 0) -> None:
@@ -359,13 +365,6 @@ class Topology:
     """Tag vertices known to be tiling vertices (not just corners) as such."""
     for v in self.points.values():
       v.is_tiling_vertex = len(v.neighbours) > 2
-
-
-  def _setup_vertex_dual_tiles(self) -> None:
-    """Set dual tiles of the tiling vertices."""
-    for v in self.points.values():
-      if v.is_tiling_vertex:
-        v._set_dual_tile()
 
 
   def _setup_edges(self, debug:int = 0) -> None:
@@ -714,7 +713,9 @@ class Topology:
       for element_id in orbit:
         self.points[int(element_id[1:])].transitivity_class = LABELS[i]
     # generate the dual based on the vertices assigned a class so far
-    self._setup_dual_tiles()
+    self.dual_centres = [k for k, v in self.points.items()
+                         if v.transitivity_class is not None]
+    # self._setup_dual_tiles()
     # then ensure all vertices are assigned a transitivity class
     for v in self.points.values():
       if v.transitivity_class is None:
@@ -813,15 +814,20 @@ class Topology:
     return e
 
 
-  def _setup_dual_tiles(self):
-    self.dual_tiles = copy.deepcopy(self.tileable)
-    dual_tiles = [v.dual_tile for v in self.points.values()
-                  if v.dual_tile is not None and
-                  v.transitivity_class is not None]
-    self.dual_tiles.tiles = gpd.GeoDataFrame(
-      geometry = gpd.GeoSeries(dual_tiles),
+  def _get_vertex_dual_tiles(self) -> None:
+    """Set dual tiles of the tiling vertices."""
+    tiles = [self.points[v].get_dual_tile() for v in self.dual_centres]
+    return [t for t in tiles if t is not None]
+
+
+  def get_dual_tile_unit(self):
+    dual_tile_unit = copy.deepcopy(self.tileable)
+    dual_tiles = self._get_vertex_dual_tiles()
+    dual_tile_unit.tiles = gpd.GeoDataFrame(
+      geometry = gpd.GeoSeries(dual_tiles), crs = self.tileable.crs,
       data = {"tile_id": tiling_utils.TILE_IDS[:len(dual_tiles)]})
-    self.dual_tiles._setup_regularised_prototile(True)
+    dual_tile_unit._setup_regularised_prototile(True)
+    return dual_tile_unit
 
 
   def transform_geometry(
